@@ -9,6 +9,7 @@ interface Event {
   id: string;
   name: string;
   date: string;
+  creator_name: string | null;
   created_at: string;
   attendee_count: number;
 }
@@ -269,6 +270,9 @@ export default function AdminPage() {
                   <div>
                     <p className="font-semibold text-sm" style={{ color: S.snow }}>{event.name}</p>
                     <p className="text-xs mt-0.5" style={{ color: S.muted }}>{event.date}</p>
+                    {event.creator_name && (
+                      <p className="text-xs mt-0.5" style={{ color: S.muted }}>Created by {event.creator_name}</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">

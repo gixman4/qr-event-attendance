@@ -13,7 +13,7 @@ const S = {
   snow: '#FBFAFA', muted: 'rgba(251,250,250,0.50)', muted2: 'rgba(251,250,250,0.25)',
 };
 
-interface Event { id: string; name: string; date: string; created_at: string; }
+interface Event { id: string; name: string; date: string; creator_name: string | null; created_at: string; }
 interface Attendee { id: string; first_name: string; last_name: string; registered_at: string; }
 
 function getInitials(f: string, l: string) { return `${f[0] ?? ''}${l[0] ?? ''}`.toUpperCase(); }
@@ -227,6 +227,9 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
           <div>
             <h1 className="text-2xl font-black tracking-tight" style={{ color: S.snow }}>{event.name}</h1>
             <p className="text-sm mt-0.5" style={{ color: S.muted }}>{event.date}</p>
+            {event.creator_name && (
+              <p className="text-sm mt-1" style={{ color: S.muted }}>Created by {event.creator_name}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

@@ -14,6 +14,7 @@ const S = {
 
 export default function CreateEventPage() {
   const router = useRouter();
+  const [creatorName, setCreatorName] = useState('');
   const [name, setName] = useState('');
   const today = new Date().toISOString().split('T')[0];
   const [date, setDate] = useState(today);
@@ -27,7 +28,7 @@ export default function CreateEventPage() {
     const res = await fetch('/api/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, date }),
+      body: JSON.stringify({ creator_name: creatorName, name, date }),
     });
     if (res.ok) {
       const event = await res.json();
@@ -68,6 +69,28 @@ export default function CreateEventPage() {
         <div className="rounded-sm overflow-hidden" style={{ background: S.surface, border: `1px solid ${S.border}` }}>
           <div className="h-0.5" style={{ background: `linear-gradient(90deg, ${S.sea}, ${S.cobalt})` }} />
           <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            {/* Event creator */}
+            <div className="space-y-1.5">
+              <label htmlFor="creator-name" className="block text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>
+                Created by
+              </label>
+              <input
+                id="creator-name"
+                type="text"
+                value={creatorName}
+                onChange={(e) => setCreatorName(e.target.value)}
+                required
+                maxLength={100}
+                autoFocus
+                autoComplete="name"
+                placeholder="Your first and last name"
+                className="w-full rounded-sm px-4 py-3 text-sm outline-none transition-all"
+                style={{ background: S.surface2, border: `1px solid ${S.border}`, color: S.snow }}
+                onFocus={(e) => e.currentTarget.style.borderColor = S.sea}
+                onBlur={(e) => e.currentTarget.style.borderColor = S.border}
+              />
+            </div>
+
             {/* Event name */}
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>
@@ -78,7 +101,6 @@ export default function CreateEventPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                autoFocus
                 placeholder="e.g. Q3 All Hands"
                 className="w-full rounded-sm px-4 py-3 text-sm outline-none transition-all"
                 style={{ background: S.surface2, border: `1px solid ${S.border}`, color: S.snow }}

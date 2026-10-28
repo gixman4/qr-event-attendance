@@ -1,6 +1,7 @@
 import { createClient, type Client } from '@libsql/client';
 
 let _db: Client | null = null;
+let _schemaPromise: Promise<void> | undefined;
 
 export function getDb(): Client {
   if (!_db) {
@@ -12,13 +13,14 @@ export function getDb(): Client {
   return _db;
 }
 
-export async function initSchema(): Promise<void> {
+async function ensureSchema(): Promise<void> {
   const db = getDb();
   await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS events (
       id         TEXT PRIMARY KEY,
       name       TEXT NOT NULL,
       date       TEXT NOT NULL,
+      creator_name TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -31,12 +33,37 @@ export async function initSchema(): Promise<void> {
       FOREIGN KEY (event_id) REFERENCES events(id)
     );
   `);
+
+  // Older databases already have an events table. Keep their rows and leave
+  // the creator blank rather than rebuilding the table or inventing a name.
+  const columns = await db.execute('PRAGMA table_info(events)');
+  if (!columns.rows.some((column) => column.name === 'creator_name')) {
+    try {
+      await db.execute('ALTER TABLE events ADD COLUMN creator_name TEXT');
+    } catch (error) {
+      // Two serverless instances may discover the missing column at once.
+      const updatedColumns = await db.execute('PRAGMA table_info(events)');
+      if (!updatedColumns.rows.some((column) => column.name === 'creator_name')) {
+        throw error;
+      }
+    }
+  }
+}
+
+export async function initSchema(): Promise<void> {
+  // Avoid repeated schema round trips for the dashboard's live refresh.
+  _schemaPromise ??= ensureSchema().catch((error) => {
+    _schemaPromise = undefined;
+    throw error;
+  });
+  await _schemaPromise;
 }
 
 export interface Event {
   id: string;
   name: string;
   date: string;
+  creator_name: string | null;
   created_at: string;
   attendee_count?: number;
 }

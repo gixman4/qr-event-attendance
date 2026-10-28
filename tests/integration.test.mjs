@@ -7,6 +7,8 @@ import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
+import { createClient } from '@libsql/client';
+import ExcelJS from 'exceljs';
 
 const password = `test-password-${randomUUID()}`;
 const secret = `test-secret-${randomUUID()}-${randomUUID()}`;
@@ -21,6 +23,21 @@ async function availablePort() {
 
 test('production flow keeps admin data private and public check-in working', { timeout: 90_000 }, async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'epam-events-test-'));
+  const legacyId = randomUUID();
+  const legacyDb = createClient({ url: `file:${join(dir, 'events.db')}` });
+  await legacyDb.execute(`
+    CREATE TABLE events (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      date TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  await legacyDb.execute({
+    sql: 'INSERT INTO events (id, name, date) VALUES (?, ?, ?)',
+    args: [legacyId, 'Existing Event', '2026-10-27'],
+  });
+  legacyDb.close();
   const port = await availablePort();
   const origin = `http://127.0.0.1:${port}`;
   let logs = '';
@@ -67,7 +84,13 @@ test('production flow keeps admin data private and public check-in working', { t
   assert.match(await home.text(), /EPAM Events/);
   assert.equal((await request('/epam-logo.svg')).status, 200);
   assert.equal((await request('/admin')).status, 200);
-  assert.equal((await request('/admin/create')).status, 200);
+  const createPage = await request('/admin/create');
+  assert.equal(createPage.status, 200);
+  const createHtml = await createPage.text();
+  assert.ok(createHtml.includes('Created by'));
+  assert.ok(createHtml.includes('Event Name'));
+  assert.ok(createHtml.indexOf('Created by') < createHtml.indexOf('Event Name'));
+  assert.match(createHtml, /id="creator-name"[^>]*required/);
 
   assert.equal((await request('/api/events')).status, 401);
   assert.equal((await request('/api/events', { cookie: 'qr_admin_session=authenticated' })).status, 401);
@@ -86,6 +109,15 @@ test('production flow keeps admin data private and public check-in working', { t
   assert.ok(cookie?.startsWith('qr_admin_session=v1.'));
   assert.equal((await request('/api/auth', { cookie })).status, 200);
 
+  const legacyList = await request('/api/events', { cookie });
+  assert.equal(legacyList.status, 200);
+  assert.equal((await legacyList.json()).find((event) => event.id === legacyId).creator_name, null);
+  const legacyDetails = await request(`/api/events/${legacyId}`, { cookie });
+  assert.equal(legacyDetails.status, 200);
+  assert.equal((await legacyDetails.json()).event.creator_name, null);
+  // Initializing the schema repeatedly must not lose existing events.
+  assert.equal((await request('/api/events', { cookie })).status, 200);
+
   const forged = `${cookie.slice(0, -1)}${cookie.endsWith('a') ? 'b' : 'a'}`;
   assert.equal((await request('/api/events', { cookie: forged })).status, 401);
   const expiry = Math.floor(Date.now() / 1000) - 1;
@@ -93,13 +125,26 @@ test('production flow keeps admin data private and public check-in working', { t
   const sig = createHmac('sha256', secret).update(payload).digest('hex');
   assert.equal((await request('/api/events', { cookie: `qr_admin_session=${payload}.${sig}` })).status, 401);
 
+  async function invalidCreator(creatorName) {
+    return request('/api/events', {
+      method: 'POST', cookie, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Should Not Create', date: '2026-10-28', creator_name: creatorName }),
+    });
+  }
+  for (const invalid of [undefined, '', '   ', 42, 'x'.repeat(101)]) {
+    assert.equal((await invalidCreator(invalid)).status, 400);
+  }
+
   const create = await request('/api/events', {
     method: 'POST', cookie, headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name: 'Brand QA', date: '2026-10-28' }),
+    body: JSON.stringify({ creator_name: '  QA Organizer  ', name: 'Brand QA', date: '2026-10-28' }),
   });
   assert.equal(create.status, 201);
-  const { id } = await create.json();
+  const { id, creator_name: creatorName } = await create.json();
   assert.ok(id);
+  assert.equal(creatorName, 'QA Organizer');
+  const updatedList = await request('/api/events', { cookie });
+  assert.equal((await updatedList.json()).find((event) => event.id === id).creator_name, 'QA Organizer');
   assert.equal((await request(`/admin/events/${id}`)).status, 200);
   assert.equal((await request(`/attend/${id}`)).status, 200);
   assert.equal((await request(`/api/events/${id}`)).status, 401);
@@ -128,14 +173,18 @@ test('production flow keeps admin data private and public check-in working', { t
   })).status, 401);
   const details = await request(`/api/events/${id}`, { cookie });
   assert.equal(details.status, 200);
-  assert.equal((await details.json()).attendees.length, 2);
+  const detailData = await details.json();
+  assert.equal(detailData.event.creator_name, 'QA Organizer');
+  assert.equal(detailData.attendees.length, 2);
 
   const edit = await request(`/api/events/${id}`, {
     method: 'PUT', cookie, headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name: 'Brand QA Updated', date: '2026-10-29' }),
   });
   assert.equal(edit.status, 200);
-  assert.equal((await edit.json()).name, 'Brand QA Updated');
+  const edited = await edit.json();
+  assert.equal(edited.name, 'Brand QA Updated');
+  assert.equal(edited.creator_name, 'QA Organizer');
   assert.deepEqual(await (await request(`/api/events/${id}/public`)).json(), {
     event: { name: 'Brand QA Updated', date: '2026-10-29' },
   });
@@ -147,12 +196,19 @@ test('production flow keeps admin data private and public check-in working', { t
   assert.match(excel.headers.get('content-type'), /spreadsheetml\.sheet/);
   const bytes = new Uint8Array(await excel.arrayBuffer());
   assert.equal(String.fromCharCode(...bytes.slice(0, 2)), 'PK');
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(Buffer.from(bytes));
+  const sheet = workbook.getWorksheet('Attendees');
+  assert.equal(sheet.getRow(4).getCell(2).value, 'First Name');
+  assert.equal(sheet.getRow(5).getCell(2).value, 'Public');
+  assert.doesNotMatch(JSON.stringify(sheet.getSheetValues()), /QA Organizer|Created by/);
 
   assert.equal((await request(`/api/events/${id}/attendees/${attendee.id}`, { method: 'DELETE', cookie })).status, 200);
   const remaining = await request(`/api/events/${id}`, { cookie });
   assert.equal((await remaining.json()).attendees.length, 1);
   assert.equal((await request(`/api/events/${id}`, { method: 'DELETE', cookie })).status, 200);
   assert.equal((await request(`/api/events/${id}/public`)).status, 404);
+  assert.equal((await request(`/api/events/${legacyId}`, { cookie })).status, 200);
 
   const logout = await request('/api/auth', { method: 'DELETE', cookie });
   assert.equal(logout.status, 200);

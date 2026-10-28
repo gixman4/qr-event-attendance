@@ -1,10 +1,14 @@
 import { getDb } from '@/lib/db';
+import { requireAuth } from '@/lib/auth';
 
-// DELETE /api/events/[id]/attendees/[aid] — remove a single attendee
+// DELETE /api/events/[id]/attendees/[aid] — remove a single attendee (protected)
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string; aid: string }> }
 ) {
+  const unauth = await requireAuth();
+  if (unauth) return unauth;
+
   const { id, aid } = await params;
   const db = getDb();
 

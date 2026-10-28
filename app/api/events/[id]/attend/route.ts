@@ -1,7 +1,7 @@
 import { getDb } from '@/lib/db';
 import { randomUUID } from 'crypto';
 
-// POST /api/events/[id]/attend — register an attendee
+// POST /api/events/[id]/attend — public (attendees submit this from their phones)
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

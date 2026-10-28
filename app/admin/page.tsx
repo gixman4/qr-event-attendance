@@ -29,15 +29,15 @@ export default function AdminPage() {
   const [eventsLoading, setEventsLoading] = useState(false);
 
   useEffect(() => {
-    fetch('/api/events')
+    fetch('/api/auth')
       .then(async (res) => {
         if (res.ok) {
-          setEvents(await res.json());
           setAuthenticated(true);
+          loadEvents();
         }
       })
       .finally(() => setChecking(false));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadEvents = async () => {
     setEventsLoading(true);

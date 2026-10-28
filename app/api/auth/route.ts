@@ -1,4 +1,13 @@
-import { verifyPassword, setAuthCookie, clearAuthCookie } from '@/lib/auth';
+import { verifyPassword, setAuthCookie, clearAuthCookie, isAuthenticated } from '@/lib/auth';
+
+// GET /api/auth — check if current session is valid
+export async function GET() {
+  const authed = await isAuthenticated();
+  if (!authed) {
+    return Response.json({ authenticated: false }, { status: 401 });
+  }
+  return Response.json({ authenticated: true });
+}
 
 // POST /api/auth — login
 export async function POST(request: Request) {

@@ -1,11 +1,15 @@
 import { getDb } from '@/lib/db';
+import { requireAuth } from '@/lib/auth';
 import ExcelJS from 'exceljs';
 
-// GET /api/events/[id]/export — download attendees as Excel
+// GET /api/events/[id]/export — download attendees as Excel (protected)
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const unauth = await requireAuth();
+  if (unauth) return unauth;
+
   const { id } = await params;
   const db = getDb();
 

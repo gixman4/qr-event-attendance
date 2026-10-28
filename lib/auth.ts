@@ -33,3 +33,13 @@ export async function clearAuthCookie(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
 }
+
+// Returns a 401 Response if not authenticated, otherwise null.
+// Usage: const unauth = await requireAuth(); if (unauth) return unauth;
+export async function requireAuth(): Promise<Response | null> {
+  const authed = await isAuthenticated();
+  if (!authed) {
+    return Response.json({ error: 'Unauthorized.' }, { status: 401 });
+  }
+  return null;
+}

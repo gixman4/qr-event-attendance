@@ -1,11 +1,15 @@
 import { getDb } from '@/lib/db';
+import { requireAuth } from '@/lib/auth';
 import { randomUUID } from 'crypto';
 
-// POST /api/events/[id]/attendees — manually add an attendee
+// POST /api/events/[id]/attendees — manually add an attendee (protected)
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const unauth = await requireAuth();
+  if (unauth) return unauth;
+
   const { id } = await params;
   const db = getDb();
 

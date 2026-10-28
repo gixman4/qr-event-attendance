@@ -1,8 +1,12 @@
 import { getDb, initSchema } from '@/lib/db';
+import { requireAuth } from '@/lib/auth';
 import { randomUUID } from 'crypto';
 
-// GET /api/events — list all events with attendee counts
+// GET /api/events — list all events with attendee counts (protected)
 export async function GET() {
+  const unauth = await requireAuth();
+  if (unauth) return unauth;
+
   const db = getDb();
   await initSchema();
 
@@ -25,10 +29,12 @@ export async function GET() {
   return Response.json(events);
 }
 
-// POST /api/events — create a new event
+// POST /api/events — create a new event (protected)
 export async function POST(request: Request) {
-  const { name, date } = await request.json();
+  const unauth = await requireAuth();
+  if (unauth) return unauth;
 
+  const { name, date } = await request.json();
   if (!name?.trim() || !date?.trim()) {
     return Response.json({ error: 'Name and date are required.' }, { status: 400 });
   }

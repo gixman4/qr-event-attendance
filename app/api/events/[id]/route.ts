@@ -1,6 +1,7 @@
 import { getDb, initSchema } from '@/lib/db';
+import { requireAuth } from '@/lib/auth';
 
-// GET /api/events/[id] — get a single event with attendees
+// GET /api/events/[id] — public (attend page needs this)
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -26,11 +27,14 @@ export async function GET(
   return Response.json({ event: eventResult.rows[0], attendees: attendeesResult.rows });
 }
 
-// PUT /api/events/[id] — update event name and/or date
+// PUT /api/events/[id] — update event (protected)
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const unauth = await requireAuth();
+  if (unauth) return unauth;
+
   const { id } = await params;
   const db = getDb();
 
@@ -61,11 +65,14 @@ export async function PUT(
   return Response.json(updated.rows[0]);
 }
 
-// DELETE /api/events/[id] — delete event and all its attendees
+// DELETE /api/events/[id] — delete event (protected)
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const unauth = await requireAuth();
+  if (unauth) return unauth;
+
   const { id } = await params;
   const db = getDb();
 

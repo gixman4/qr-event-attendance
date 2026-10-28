@@ -1,0 +1,115 @@
+.poster-app {
+  min-height: 100vh;
+  padding: 20px 20px 48px;
+  background: var(--epam-night);
+  color: var(--epam-snow);
+}
+
+.poster-controls {
+  width: min(100%, 210mm);
+  margin: 0 auto 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.poster-back { color: var(--epam-sky); }
+.poster-back:hover { color: var(--epam-sea); }
+
+.poster-actions { display: flex; align-items: center; gap: 16px; color: var(--epam-muted); }
+.poster-actions button {
+  padding: 10px 18px;
+  border-radius: 2px;
+  background: var(--epam-cobalt);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.poster-actions button:disabled { opacity: 0.5; cursor: wait; }
+
+.poster-sheet {
+  width: min(100%, 210mm);
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 46px 54px 30px;
+  display: flex;
+  flex-direction: column;
+  background: #111;
+  border: 1px solid var(--epam-border);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 35%);
+  text-align: center;
+}
+
+.poster-header { display: flex; align-items: center; justify-content: space-between; }
+.poster-logo { width: 126px; height: auto; }
+.poster-brand { font-size: 12px; font-weight: 700; letter-spacing: 0.2em; color: var(--epam-muted); }
+
+.poster-content { flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; padding: 32px 0; }
+.poster-kicker { font-size: 13px; font-weight: 700; letter-spacing: 0.3em; color: var(--epam-sea); }
+.poster-rule { width: 84px; height: 3px; margin: 18px 0 30px; background: var(--epam-sea); }
+.poster-event-title { max-width: 100%; font-size: clamp(30px, 5vw, 50px); line-height: 1.1; font-weight: 900; overflow-wrap: anywhere; }
+.poster-date { margin-top: 14px; font-size: 21px; color: var(--epam-sky); }
+
+.poster-qr {
+  width: min(100%, 390px);
+  aspect-ratio: 1;
+  margin: 42px auto 30px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  color: #060606;
+}
+.poster-qr-image { width: 100%; height: auto; display: block; }
+.poster-qr-loading { padding: 12px; font-size: 16px; }
+.poster-instruction { font-size: 32px; font-weight: 900; line-height: 1.1; }
+.poster-subline { margin-top: 9px; font-size: 17px; color: var(--epam-muted); }
+
+.poster-footer { border-top: 1px solid var(--epam-border); padding-top: 18px; display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--epam-muted); overflow-wrap: anywhere; text-align: left; }
+.poster-footer-mark { width: 28px; height: 4px; flex: none; margin-top: 4px; background: var(--epam-cobalt); }
+
+@media (max-width: 600px) {
+  .poster-controls { flex-wrap: wrap; }
+  .poster-actions { width: 100%; justify-content: space-between; gap: 8px; }
+  .poster-actions button { flex: none; }
+  .poster-sheet { padding: 28px 20px; min-height: 760px; }
+  .poster-logo { width: 85px; }
+  .poster-brand { font-size: 9px; }
+  .poster-date { font-size: 18px; }
+  .poster-qr { margin: 30px auto; }
+  .poster-instruction { font-size: 27px; }
+  .poster-subline { font-size: 15px; }
+}
+
+@page { size: A4 portrait; margin: 0; }
+
+@media print {
+  html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; color: #060606 !important; }
+  .poster-controls { display: none !important; }
+  .poster-app { min-height: 0; margin: 0; padding: 0; background: #fff !important; }
+  .poster-sheet {
+    width: 210mm;
+    height: 297mm;
+    min-height: 0;
+    margin: 0;
+    padding: 18mm 17mm 14mm;
+    background: #fff !important;
+    color: #060606 !important;
+    border: none;
+    box-shadow: none;
+    break-inside: avoid;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .poster-logo { filter: invert(1); }
+  .poster-brand, .poster-footer, .poster-subline { color: #434343 !important; }
+  .poster-kicker, .poster-date { color: #0047FF !important; }
+  .poster-rule, .poster-footer-mark { background: #0047FF !important; }
+  .poster-qr { width: 112mm; height: 112mm; margin: 10mm auto 8mm; background: #fff !important; border: 1px solid #ddd; }
+  .poster-instruction, .poster-event-title { color: #060606 !important; }
+  .poster-event-title { font-size: 30pt; }
+  .poster-content { padding: 8mm 0; }
+}

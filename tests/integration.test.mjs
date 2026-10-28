@@ -115,6 +115,9 @@ test('production flow keeps admin data private and public check-in working', { t
   const legacyDetails = await request(`/api/events/${legacyId}`, { cookie });
   assert.equal(legacyDetails.status, 200);
   assert.equal((await legacyDetails.json()).event.creator_name, null);
+  const legacyPoster = await request(`/admin/events/${legacyId}/poster`, { cookie });
+  assert.equal(legacyPoster.status, 200);
+  assert.match(await legacyPoster.text(), /Existing Event/);
   // Initializing the schema repeatedly must not lose existing events.
   assert.equal((await request('/api/events', { cookie })).status, 200);
 
@@ -146,6 +149,23 @@ test('production flow keeps admin data private and public check-in working', { t
   const updatedList = await request('/api/events', { cookie });
   assert.equal((await updatedList.json()).find((event) => event.id === id).creator_name, 'QA Organizer');
   assert.equal((await request(`/admin/events/${id}`)).status, 200);
+  const protectedPoster = await request(`/admin/events/${id}/poster`, { redirect: 'manual' });
+  assert.equal(protectedPoster.status, 307);
+  assert.equal(protectedPoster.headers.get('location'), '/admin');
+  const poster = await request(`/admin/events/${id}/poster`, { cookie });
+  assert.equal(poster.status, 200);
+  const posterHtml = await poster.text();
+  assert.match(posterHtml, /Brand QA/);
+  assert.match(posterHtml, /October 28, 2026/);
+  assert.match(posterHtml, /EPAM EVENTS/);
+  assert.match(posterHtml, /Print \/ Save PDF/);
+  assert.match(posterHtml, /epam-logo\.svg/);
+  assert.doesNotMatch(posterHtml, /QA Organizer|Public Person|Manual Person/);
+  const cssPaths = [...posterHtml.matchAll(/href="([^"]+\.css[^"]*)"/g)].map((match) => match[1]);
+  assert.ok(cssPaths.length > 0);
+  const styleSheets = await Promise.all(cssPaths.map(async (path) => (await request(path)).text()));
+  assert.ok(styleSheets.some((css) => /@page/.test(css) && /A4/i.test(css) && /poster-controls/.test(css)));
+  assert.equal((await request(`/admin/events/not-a-real-event/poster`, { cookie })).status, 404);
   assert.equal((await request(`/attend/${id}`)).status, 200);
   assert.equal((await request(`/api/events/${id}`)).status, 401);
   assert.equal((await request(`/api/events/${id}/export`)).status, 401);
@@ -176,6 +196,9 @@ test('production flow keeps admin data private and public check-in working', { t
   const detailData = await details.json();
   assert.equal(detailData.event.creator_name, 'QA Organizer');
   assert.equal(detailData.attendees.length, 2);
+  const posterAfterCheckin = await request(`/admin/events/${id}/poster`, { cookie });
+  assert.equal(posterAfterCheckin.status, 200);
+  assert.doesNotMatch(await posterAfterCheckin.text(), /Public Person|Manual Person|QA Organizer/);
 
   const edit = await request(`/api/events/${id}`, {
     method: 'PUT', cookie, headers: { 'content-type': 'application/json' },

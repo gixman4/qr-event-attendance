@@ -17,3 +17,7 @@ Configure `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `ADMIN_PASSWORD`, and `SESSI
 **Security:** If any database token or admin password was shared outside a secure channel, revoke/rotate the token in Turso and change the password in Vercel and `.env.local`. After rotation, redeploy. Do not include credentials in a Git repository or a public chat.
 
 Public QR links expose only the event name and date; the attendee list and Excel download require an authenticated admin session. Team members should use the password-protected `/admin` page.
+
+## Printing a check-in poster
+
+From an event's admin page, click **Print poster / Save PDF** below its QR code. The A4 portrait preview opens in a new tab. Once the QR code appears, click **Print / Save PDF** and choose a printer or **Save as PDF** in the browser dialog. The printed version uses a light, ink-friendly layout with a large high-contrast QR code; no attendee or organizer names appear on the poster.

@@ -1,5 +1,6 @@
 import { getDb, initSchema } from '@/lib/db';
 import { setAuthCookie } from '@/lib/auth';
+import { writeLog } from '@/lib/log';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
@@ -26,7 +27,17 @@ export async function POST(request: Request) {
   const db = getDb();
   await initSchema();
 
-  // Check for existing username (case-insensitive via LOWER()).
+  // Check registration mode.
+  const settingResult = await db.execute({
+    sql: "SELECT value FROM settings WHERE key = 'registration_mode'",
+    args: [],
+  });
+  const mode = settingResult.rows.length > 0 ? String(settingResult.rows[0].value) : 'open';
+  if (mode === 'closed') {
+    return Response.json({ error: 'Registration is currently closed.' }, { status: 403 });
+  }
+
+  // Check for existing username (case-insensitive).
   const existing = await db.execute({
     sql: 'SELECT id FROM users WHERE LOWER(username) = LOWER(?)',
     args: [username],
@@ -43,11 +54,23 @@ export async function POST(request: Request) {
     args: [id, username, passwordHash],
   });
 
+  // Run the super-admin seed in case gchikvinidze just registered.
+  await db.execute({
+    sql: "UPDATE users SET role = 'super_admin' WHERE username = 'gchikvinidze' AND role = 'user'",
+    args: [],
+  });
+
+  // Fetch the actual role (may have been promoted above).
+  const newUser = await db.execute({ sql: 'SELECT role FROM users WHERE id = ?', args: [id] });
+  const role = newUser.rows.length > 0 ? String(newUser.rows[0].role) : 'user';
+
+  await writeLog(id, username, 'user.register', `username: ${username}`);
+
   try {
-    await setAuthCookie(id, username);
+    await setAuthCookie(id, username, role);
   } catch {
     return Response.json({ error: 'Session authentication is not configured.' }, { status: 503 });
   }
 
-  return Response.json({ success: true, username }, { status: 201 });
+  return Response.json({ success: true, username, role }, { status: 201 });
 }

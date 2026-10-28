@@ -43,6 +43,7 @@ function Spinner() {
 export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [currentUsername, setCurrentUsername] = useState('');
+  const [currentRole, setCurrentRole] = useState('');
   const [checking, setChecking] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -60,6 +61,7 @@ export default function AdminPage() {
           const data = await res.json();
           setAuthenticated(true);
           setCurrentUsername(data.username ?? '');
+          setCurrentRole(data.role ?? '');
           const eventsResponse = await fetch('/api/events', { cache: 'no-store' });
           if (eventsResponse.ok) setEvents(await eventsResponse.json());
         }
@@ -115,6 +117,7 @@ export default function AdminPage() {
       const data = await res.json();
       setAuthenticated(true);
       setCurrentUsername(data.username ?? username);
+      setCurrentRole(data.role ?? '');
       loadEvents();
     } else {
       const data = await res.json();
@@ -127,6 +130,7 @@ export default function AdminPage() {
     await fetch('/api/auth', { method: 'DELETE' });
     setAuthenticated(false);
     setCurrentUsername('');
+    setCurrentRole('');
     setEvents([]);
     setUsername('');
     setPassword('');
@@ -244,6 +248,15 @@ export default function AdminPage() {
               </svg>
               {currentUsername}
             </span>
+          )}
+          {currentRole === 'super_admin' && (
+            <Link
+              href="/superadmin"
+              className="hidden sm:flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-sm transition-opacity hover:opacity-80"
+              style={{ background: S.lilac, color: S.bg }}
+            >
+              Super Admin
+            </Link>
           )}
           <Link
             href="/admin/create"

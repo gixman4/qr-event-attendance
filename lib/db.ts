@@ -18,15 +18,34 @@ export function getDb(): Client {
 async function ensureSchema(): Promise<void> {
   const db = getDb();
 
-  // --- users table (new) ---
+  // --- users table ---
   await db.execute(`
     CREATE TABLE IF NOT EXISTS users (
       id            TEXT PRIMARY KEY,
       username      TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
+      role          TEXT NOT NULL DEFAULT 'user',
       created_at    TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+
+  // Add role column to existing users tables that predate it.
+  const userCols = await db.execute('PRAGMA table_info(users)');
+  const existingUserCols = new Set(userCols.rows.map((r) => String(r.name)));
+  if (!existingUserCols.has('role')) {
+    try {
+      await db.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+    } catch (error) {
+      const recheck = await db.execute('PRAGMA table_info(users)');
+      if (!recheck.rows.some((r) => r.name === 'role')) throw error;
+    }
+  }
+
+  // Seed super-admin: promote gchikvinidze on every schema init (idempotent).
+  await db.execute({
+    sql: "UPDATE users SET role = 'super_admin' WHERE username = 'gchikvinidze' AND role = 'user'",
+    args: [],
+  });
 
   // --- events table ---
   // Clean-slate migration: if owner_id column is missing the database still
@@ -36,12 +55,10 @@ async function ensureSchema(): Promise<void> {
   const existingEventCols = new Set(eventCols.rows.map((r) => String(r.name)));
 
   if (!existingEventCols.has('owner_id')) {
-    // Wipe legacy data and rebuild with the new schema.
     await db.executeMultiple(`
       DELETE FROM attendees;
       DELETE FROM events;
     `);
-    // Add the owner_id column (table already exists from CREATE IF NOT EXISTS above).
     await db.execute('ALTER TABLE events ADD COLUMN owner_id TEXT REFERENCES users(id)');
   }
 
@@ -71,7 +88,7 @@ async function ensureSchema(): Promise<void> {
     );
   `);
 
-  // Legacy column additions for events (all pre-owner_id columns).
+  // Legacy column additions for events.
   const updatedEventCols = await db.execute('PRAGMA table_info(events)');
   const allEventCols = new Set(updatedEventCols.rows.map((r) => String(r.name)));
   for (const [column, statement] of [
@@ -111,10 +128,33 @@ async function ensureSchema(): Promise<void> {
   await db.execute('CREATE INDEX IF NOT EXISTS idx_attendees_event_name ON attendees (event_id, first_name_key, last_name_key)');
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_attendees_unkeyed_event ON attendees (event_id)
     WHERE first_name_key IS NULL OR last_name_key IS NULL`);
+
+  // --- logs table ---
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS logs (
+      id         TEXT PRIMARY KEY,
+      actor_id   TEXT,
+      actor_name TEXT,
+      action     TEXT NOT NULL,
+      target     TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  // --- settings table ---
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+  // Seed default registration mode if not set.
+  await db.execute(`
+    INSERT OR IGNORE INTO settings (key, value) VALUES ('registration_mode', 'open')
+  `);
 }
 
-// Migrate at most one event-sized chunk per check-in, rather than blocking all
-// requests while an unbounded historical attendee table is backfilled.
+// Migrate at most one event-sized chunk per check-in.
 async function backfillChunk(eventId: string): Promise<boolean> {
   const db = getDb();
   const batchSize = 250;
@@ -143,7 +183,6 @@ export function backfillEventNameKeys(eventId: string): Promise<boolean> {
 }
 
 export async function initSchema(): Promise<void> {
-  // Avoid repeated schema round trips for the dashboard's live refresh.
   _schemaPromise ??= ensureSchema().catch((error) => {
     _schemaPromise = undefined;
     throw error;
@@ -155,6 +194,7 @@ export interface User {
   id: string;
   username: string;
   password_hash: string;
+  role: string;
   created_at: string;
 }
 
@@ -179,4 +219,13 @@ export interface Attendee {
   first_name_key: string | null;
   last_name_key: string | null;
   registered_at: string;
+}
+
+export interface Log {
+  id: string;
+  actor_id: string | null;
+  actor_name: string | null;
+  action: string;
+  target: string | null;
+  created_at: string;
 }

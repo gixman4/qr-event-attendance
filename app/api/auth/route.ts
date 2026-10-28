@@ -2,13 +2,13 @@ import { getDb, initSchema } from '@/lib/db';
 import { setAuthCookie, clearAuthCookie, getSession } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 
-// GET /api/auth — check if current session is valid; returns username when it is
+// GET /api/auth — check if current session is valid; returns username + role when it is
 export async function GET() {
   const session = await getSession();
   if (!session) {
     return Response.json({ authenticated: false }, { status: 401 });
   }
-  return Response.json({ authenticated: true, username: session.username });
+  return Response.json({ authenticated: true, username: session.username, role: session.role });
 }
 
 // POST /api/auth — login with username + password
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   await initSchema();
 
   const result = await db.execute({
-    sql: 'SELECT id, username, password_hash FROM users WHERE username = ?',
+    sql: 'SELECT id, username, password_hash, role FROM users WHERE username = ?',
     args: [username.trim()],
   });
 
@@ -41,13 +41,15 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Invalid username or password.' }, { status: 401 });
   }
 
+  const role = String(user.role ?? 'user');
+
   try {
-    await setAuthCookie(String(user.id), String(user.username));
+    await setAuthCookie(String(user.id), String(user.username), role);
   } catch {
     return Response.json({ error: 'Session authentication is not configured.' }, { status: 503 });
   }
 
-  return Response.json({ success: true, username: String(user.username) });
+  return Response.json({ success: true, username: String(user.username), role });
 }
 
 // DELETE /api/auth — logout

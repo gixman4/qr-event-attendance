@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { startVisiblePolling } from '@/lib/visible-polling.mts';
 
 interface Event {
   id: string;
@@ -48,19 +49,45 @@ export default function AdminPage() {
       .then(async (res) => {
         if (res.ok) {
           setAuthenticated(true);
-          const eventsResponse = await fetch('/api/events');
+          const eventsResponse = await fetch('/api/events', { cache: 'no-store' });
           if (eventsResponse.ok) setEvents(await eventsResponse.json());
         }
       })
+      .catch(() => { /* Retry the event list when polling starts. */ })
       .finally(() => setChecking(false));
   }, []);
 
   const loadEvents = async () => {
     setEventsLoading(true);
-    const res = await fetch('/api/events');
-    if (res.ok) setEvents(await res.json());
-    setEventsLoading(false);
+    try {
+      const res = await fetch('/api/events', { cache: 'no-store' });
+      if (res.status === 401) {
+        setAuthenticated(false);
+        setEvents([]);
+      } else if (res.ok) {
+        setEvents(await res.json());
+      }
+    } catch {
+      // Keep the existing events; polling will retry while the tab is visible.
+    } finally {
+      setEventsLoading(false);
+    }
   };
+
+  useEffect(() => {
+    if (!authenticated || checking || eventsLoading) return;
+    return startVisiblePolling(async (signal) => {
+      const res = await fetch('/api/events', { cache: 'no-store', signal });
+      if (signal.aborted) return;
+      if (res.status === 401) {
+        setAuthenticated(false);
+        setEvents([]);
+      } else if (res.ok) {
+        const data: Event[] = await res.json();
+        if (!signal.aborted) setEvents(data);
+      }
+    });
+  }, [authenticated, checking, eventsLoading]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -187,6 +214,7 @@ export default function AdminPage() {
         <div className="mb-7">
           <h1 className="text-2xl font-black tracking-tight" style={{ color: S.snow }}>Events</h1>
           <p className="text-sm mt-0.5" style={{ color: S.muted }}>{events.length} total</p>
+          <p className="text-xs mt-1" style={{ color: S.sea }}>● Live · updates every 5 seconds</p>
         </div>
 
         {eventsLoading ? (
@@ -245,7 +273,7 @@ export default function AdminPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
-                    <span className="text-xl font-black" style={{ color: S.sea }}>{event.attendee_count}</span>
+                    <span className="text-xl font-black" aria-live="polite" style={{ color: S.sea }}>{event.attendee_count}</span>
                     <p className="text-xs leading-none mt-0.5" style={{ color: S.muted }}>
                       {event.attendee_count === 1 ? 'attendee' : 'attendees'}
                     </p>

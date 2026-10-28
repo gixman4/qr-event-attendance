@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
+import { startVisiblePolling } from '@/lib/visible-polling.mts';
 
 const S = {
   bg: '#060606', surface: '#111111', surface2: '#1a1a1a',
@@ -69,17 +70,22 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [addLast, setAddLast] = useState('');
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
+  const attendeeRevision = useRef(0);
 
   const attendUrl = typeof window !== 'undefined' ? `${window.location.origin}/attend/${id}` : `/attend/${id}`;
 
   const loadData = async () => {
-    const res = await fetch(`/api/events/${id}`);
-    if (res.status === 401) { router.replace('/admin'); return; }
-    if (!res.ok) { setError('Event not found.'); setLoading(false); return; }
-    const data = await res.json();
-    setEvent(data.event);
-    setAttendees(data.attendees);
-    setLoading(false);
+    try {
+      const res = await fetch(`/api/events/${id}`, { cache: 'no-store' });
+      if (res.status === 401) { router.replace('/admin'); return; }
+      if (!res.ok) return;
+      const data = await res.json();
+      attendeeRevision.current++;
+      setEvent(data.event);
+      setAttendees(data.attendees);
+    } catch {
+      // Leave the currently displayed attendees intact on network errors.
+    }
   };
 
   useEffect(() => {
@@ -94,6 +100,24 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       .catch(() => setError('Unable to load event.'))
       .finally(() => setLoading(false));
   }, [id, router]);
+
+  const hasEvent = event !== null;
+  useEffect(() => {
+    if (loading || error || !hasEvent) return;
+    return startVisiblePolling(async (signal) => {
+      const revision = attendeeRevision.current;
+      const res = await fetch(`/api/events/${id}`, { cache: 'no-store', signal });
+      if (signal.aborted) return;
+      if (res.status === 401) {
+        router.replace('/admin');
+      } else if (res.ok) {
+        const data: { attendees: Attendee[] } = await res.json();
+        if (!signal.aborted && revision === attendeeRevision.current) {
+          setAttendees(data.attendees);
+        }
+      }
+    });
+  }, [id, loading, error, hasEvent, router]);
 
   useEffect(() => {
     if (!event) return;
@@ -125,6 +149,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
     const res = await fetch(`/api/events/${id}/attendees`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ first_name: addFirst, last_name: addLast }) });
     if (res.ok) {
       const attendee: Attendee = await res.json();
+      attendeeRevision.current++;
       setAttendees((p) => [...p, attendee]);
       setAddFirst(''); setAddLast(''); setShowAddPerson(false);
     }
@@ -134,7 +159,10 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
 
   const handleRemoveAttendee = async (aid: string) => {
     const res = await fetch(`/api/events/${id}/attendees/${aid}`, { method: 'DELETE' });
-    if (res.ok) setAttendees((p) => p.filter((a) => a.id !== aid));
+    if (res.ok) {
+      attendeeRevision.current++;
+      setAttendees((p) => p.filter((a) => a.id !== aid));
+    }
   };
 
   const inputStyle = { background: S.surface2, border: `1px solid ${S.border}`, color: S.snow };
@@ -253,7 +281,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                 <div className="flex items-center justify-between mb-5">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>Attendees</p>
-                    <p className="text-3xl font-black mt-0.5" style={{ color: S.sea }}>{attendees.length}</p>
+                    <p className="text-3xl font-black mt-0.5" aria-live="polite" style={{ color: S.sea }}>{attendees.length}</p>
+                    <p className="text-xs mt-1" style={{ color: S.sea }}>● Live · updates every 5 seconds</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button

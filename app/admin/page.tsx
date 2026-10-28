@@ -42,7 +42,9 @@ function Spinner() {
 
 export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState(false);
+  const [currentUsername, setCurrentUsername] = useState('');
   const [checking, setChecking] = useState(true);
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
@@ -55,7 +57,9 @@ export default function AdminPage() {
     fetch('/api/auth')
       .then(async (res) => {
         if (res.ok) {
+          const data = await res.json();
           setAuthenticated(true);
+          setCurrentUsername(data.username ?? '');
           const eventsResponse = await fetch('/api/events', { cache: 'no-store' });
           if (eventsResponse.ok) setEvents(await eventsResponse.json());
         }
@@ -70,6 +74,7 @@ export default function AdminPage() {
       const res = await fetch('/api/events', { cache: 'no-store' });
       if (res.status === 401) {
         setAuthenticated(false);
+        setCurrentUsername('');
         setEvents([]);
       } else if (res.ok) {
         setEvents(await res.json());
@@ -88,6 +93,7 @@ export default function AdminPage() {
       if (signal.aborted) return;
       if (res.status === 401) {
         setAuthenticated(false);
+        setCurrentUsername('');
         setEvents([]);
       } else if (res.ok) {
         const data: Event[] = await res.json();
@@ -103,12 +109,16 @@ export default function AdminPage() {
     const res = await fetch('/api/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     });
-    if (res.ok) { setAuthenticated(true); loadEvents(); }
-    else {
+    if (res.ok) {
       const data = await res.json();
-      setLoginError(data.error ?? 'Invalid password.');
+      setAuthenticated(true);
+      setCurrentUsername(data.username ?? username);
+      loadEvents();
+    } else {
+      const data = await res.json();
+      setLoginError(data.error ?? 'Invalid username or password.');
     }
     setLoginLoading(false);
   };
@@ -116,7 +126,9 @@ export default function AdminPage() {
   const handleLogout = async () => {
     await fetch('/api/auth', { method: 'DELETE' });
     setAuthenticated(false);
+    setCurrentUsername('');
     setEvents([]);
+    setUsername('');
     setPassword('');
   };
 
@@ -137,10 +149,31 @@ export default function AdminPage() {
               {/* Sea top bar */}
               <div className="h-0.5" style={{ background: `linear-gradient(90deg, ${S.sea}, ${S.cobalt})` }} />
               <div className="p-8">
-                <h1 className="text-xl font-bold mb-1" style={{ color: S.snow }}>Admin Access</h1>
-                <p className="text-sm mb-7" style={{ color: S.muted }}>Enter your team password to continue</p>
+                <h1 className="text-xl font-bold mb-1" style={{ color: S.snow }}>Sign In</h1>
+                <p className="text-sm mb-7" style={{ color: S.muted }}>Enter your credentials to continue.</p>
 
                 <form onSubmit={handleLogin} className="space-y-4">
+                  {/* Username */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>
+                      Username
+                    </label>
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      required
+                      autoFocus
+                      autoComplete="username"
+                      placeholder="your_username"
+                      className="w-full rounded-sm px-4 py-3 text-sm transition-all outline-none"
+                      style={{ background: S.surface2, border: `1px solid ${S.border}`, color: S.snow }}
+                      onFocus={(e) => e.currentTarget.style.borderColor = S.sea}
+                      onBlur={(e)  => e.currentTarget.style.borderColor = S.border}
+                    />
+                  </div>
+
+                  {/* Password */}
                   <div className="space-y-1.5">
                     <label className="block text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>
                       Password
@@ -149,16 +182,13 @@ export default function AdminPage() {
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      autoFocus
+                      required
+                      autoComplete="current-password"
                       placeholder="••••••••"
                       className="w-full rounded-sm px-4 py-3 text-sm transition-all outline-none"
-                      style={{
-                        background: S.surface2,
-                        border: `1px solid ${S.border}`,
-                        color: S.snow,
-                      }}
+                      style={{ background: S.surface2, border: `1px solid ${S.border}`, color: S.snow }}
                       onFocus={(e) => e.currentTarget.style.borderColor = S.sea}
-                      onBlur={(e) => e.currentTarget.style.borderColor = S.border}
+                      onBlur={(e)  => e.currentTarget.style.borderColor = S.border}
                     />
                   </div>
 
@@ -172,13 +202,20 @@ export default function AdminPage() {
                     className="w-full font-bold text-sm py-3 rounded-sm uppercase tracking-widest transition-opacity disabled:opacity-50"
                     style={{ background: S.cobalt, color: S.snow }}
                   >
-                    {loginLoading ? 'Verifying...' : 'Sign In'}
+                    {loginLoading ? 'Signing in...' : 'Sign In'}
                   </button>
                 </form>
               </div>
             </div>
+
             <p className="text-center mt-5 text-xs" style={{ color: S.muted2 }}>
-              <Link href="/" className="hover:underline" style={{ color: S.muted }}>← Back to home</Link>
+              Don&apos;t have an account?{' '}
+              <Link href="/admin/register" className="hover:underline" style={{ color: S.muted }}>
+                Register
+              </Link>
+            </p>
+            <p className="text-center mt-3 text-xs">
+              <Link href="/" className="hover:underline" style={{ color: S.muted2 }}>← Back to home</Link>
             </p>
           </div>
         </div>
@@ -196,6 +233,18 @@ export default function AdminPage() {
       >
         <Image src="/epam-logo.svg" alt="EPAM" width={80} height={28} priority />
         <div className="flex items-center gap-3">
+          {/* Username badge */}
+          {currentUsername && (
+            <span
+              className="hidden sm:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-sm"
+              style={{ background: S.surface2, border: `1px solid ${S.border}`, color: S.muted }}
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+              </svg>
+              {currentUsername}
+            </span>
+          )}
           <Link
             href="/admin/create"
             className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-sm transition-opacity hover:opacity-80"

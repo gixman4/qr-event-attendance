@@ -3,21 +3,26 @@ import { requireAuth } from '@/lib/auth';
 import { randomUUID } from 'crypto';
 import { parseEventExtras } from '@/lib/event-fields';
 
-// GET /api/events — list all events with attendee counts (protected)
+// GET /api/events — list the current user's events with attendee counts (protected)
 export async function GET() {
-  const unauth = await requireAuth();
-  if (unauth) return unauth;
+  const auth = await requireAuth();
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
 
   const db = getDb();
   await initSchema();
 
-  const result = await db.execute(`
-    SELECT e.*, COUNT(a.id) as attendee_count
-    FROM events e
-    LEFT JOIN attendees a ON a.event_id = e.id
-    GROUP BY e.id
-    ORDER BY e.date DESC, e.created_at DESC
-  `);
+  const result = await db.execute({
+    sql: `
+      SELECT e.*, COUNT(a.id) as attendee_count
+      FROM events e
+      LEFT JOIN attendees a ON a.event_id = e.id
+      WHERE e.owner_id = ?
+      GROUP BY e.id
+      ORDER BY e.date DESC, e.created_at DESC
+    `,
+    args: [userId],
+  });
 
   const events = result.rows.map((r) => ({
     id: r.id,
@@ -27,6 +32,7 @@ export async function GET() {
     start_time: r.start_time,
     location: r.location,
     check_in_open: Number(r.check_in_open),
+    owner_id: r.owner_id,
     created_at: r.created_at,
     attendee_count: Number(r.attendee_count ?? 0),
   }));
@@ -34,18 +40,13 @@ export async function GET() {
   return Response.json(events);
 }
 
-// POST /api/events — create a new event (protected)
+// POST /api/events — create a new event owned by the current user (protected)
 export async function POST(request: Request) {
-  const unauth = await requireAuth();
-  if (unauth) return unauth;
+  const auth = await requireAuth();
+  if (auth instanceof Response) return auth;
+  const { userId, username } = auth;
 
-  const { creator_name, name, date, start_time, location } = await request.json();
-  if (typeof creator_name !== 'string' || !creator_name.trim()) {
-    return Response.json({ error: 'Created by is required.' }, { status: 400 });
-  }
-  if (creator_name.trim().length > 100) {
-    return Response.json({ error: 'Created by must be 100 characters or fewer.' }, { status: 400 });
-  }
+  const { name, date, start_time, location } = await request.json();
   if (typeof name !== 'string' || !name.trim() || typeof date !== 'string' || !date.trim()) {
     return Response.json({ error: 'Name and date are required.' }, { status: 400 });
   }
@@ -57,8 +58,8 @@ export async function POST(request: Request) {
   const id = randomUUID();
 
   await db.execute({
-    sql: 'INSERT INTO events (id, name, date, creator_name, start_time, location) VALUES (?, ?, ?, ?, ?, ?)',
-    args: [id, name.trim(), date.trim(), creator_name.trim(), extras.startTime, extras.location],
+    sql: 'INSERT INTO events (id, name, date, creator_name, start_time, location, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    args: [id, name.trim(), date.trim(), username, extras.startTime, extras.location, userId],
   });
 
   const result = await db.execute({

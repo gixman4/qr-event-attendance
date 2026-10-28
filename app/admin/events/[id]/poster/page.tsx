@@ -1,11 +1,11 @@
 import { notFound, redirect } from 'next/navigation';
-import { isAuthenticated } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 import { getDb, initSchema } from '@/lib/db';
 import Poster from './poster';
 import './poster.css';
 
 export default async function PosterPage({ params }: { params: Promise<{ id: string }> }) {
-  if (!(await isAuthenticated())) redirect('/admin');
+  if (!(await getSession())) redirect('/admin');
 
   const { id } = await params;
   await initSchema();

@@ -3,13 +3,14 @@ import { requireAuth } from '@/lib/auth';
 import { normalizePersonName, personNameKey } from '@/lib/event-search.mts';
 import { randomUUID } from 'crypto';
 
-// POST /api/events/[id]/attendees — manually add an attendee (protected)
+// POST /api/events/[id]/attendees — manually add an attendee (protected, owner only)
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const unauth = await requireAuth();
-  if (unauth) return unauth;
+  const auth = await requireAuth();
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
 
   const { id } = await params;
   await initSchema();
@@ -29,9 +30,12 @@ export async function POST(
   const transaction = await db.transaction('write');
   let committed = false;
   try {
-    const eventResult = await transaction.execute({ sql: 'SELECT id FROM events WHERE id = ?', args: [id] });
+    const eventResult = await transaction.execute({ sql: 'SELECT id, owner_id FROM events WHERE id = ?', args: [id] });
     if (eventResult.rows.length === 0) {
       return Response.json({ error: 'Event not found.' }, { status: 404 });
+    }
+    if (String(eventResult.rows[0].owner_id) !== userId) {
+      return Response.json({ error: 'Forbidden.' }, { status: 403 });
     }
     // Admin additions stay available even while public check-in is closed.
     await transaction.execute({
@@ -46,5 +50,4 @@ export async function POST(
     if (!committed) await transaction.rollback().catch(() => {});
     transaction.close();
   }
-
 }

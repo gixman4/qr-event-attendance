@@ -2,13 +2,14 @@ import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import ExcelJS from 'exceljs';
 
-// GET /api/events/[id]/export — download attendees as Excel (protected)
+// GET /api/events/[id]/export — download attendees as Excel (protected, owner only)
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const unauth = await requireAuth();
-  if (unauth) return unauth;
+  const auth = await requireAuth();
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
 
   const { id } = await params;
   const db = getDb();
@@ -20,6 +21,9 @@ export async function GET(
 
   if (eventResult.rows.length === 0) {
     return Response.json({ error: 'Event not found.' }, { status: 404 });
+  }
+  if (String(eventResult.rows[0].owner_id) !== userId) {
+    return Response.json({ error: 'Forbidden.' }, { status: 403 });
   }
 
   const event = eventResult.rows[0] as unknown as { id: string; name: string; date: string; created_at: string };

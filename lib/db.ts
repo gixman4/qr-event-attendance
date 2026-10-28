@@ -17,67 +17,95 @@ export function getDb(): Client {
 
 async function ensureSchema(): Promise<void> {
   const db = getDb();
+
+  // --- users table (new) ---
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS users (
+      id            TEXT PRIMARY KEY,
+      username      TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  // --- events table ---
+  // Clean-slate migration: if owner_id column is missing the database still
+  // belongs to the old single-admin schema. Drop all rows and recreate so
+  // every event is properly owned by a user from the start.
+  const eventCols = await db.execute('PRAGMA table_info(events)');
+  const existingEventCols = new Set(eventCols.rows.map((r) => String(r.name)));
+
+  if (!existingEventCols.has('owner_id')) {
+    // Wipe legacy data and rebuild with the new schema.
+    await db.executeMultiple(`
+      DELETE FROM attendees;
+      DELETE FROM events;
+    `);
+    // Add the owner_id column (table already exists from CREATE IF NOT EXISTS above).
+    await db.execute('ALTER TABLE events ADD COLUMN owner_id TEXT REFERENCES users(id)');
+  }
+
+  // Ensure the base tables exist (idempotent).
   await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS events (
-      id         TEXT PRIMARY KEY,
-      name       TEXT NOT NULL,
-      date       TEXT NOT NULL,
-      creator_name TEXT,
-      start_time TEXT,
-      location TEXT,
+      id            TEXT PRIMARY KEY,
+      name          TEXT NOT NULL,
+      date          TEXT NOT NULL,
+      creator_name  TEXT,
+      start_time    TEXT,
+      location      TEXT,
       check_in_open INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      owner_id      TEXT REFERENCES users(id),
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS attendees (
-      id            TEXT PRIMARY KEY,
-      event_id      TEXT NOT NULL,
-      first_name    TEXT NOT NULL,
-      last_name     TEXT NOT NULL,
+      id             TEXT PRIMARY KEY,
+      event_id       TEXT NOT NULL,
+      first_name     TEXT NOT NULL,
+      last_name      TEXT NOT NULL,
       first_name_key TEXT,
-      last_name_key TEXT,
-      registered_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_name_key  TEXT,
+      registered_at  TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (event_id) REFERENCES events(id)
     );
   `);
 
-  // Older databases keep their existing rows; nullable details remain blank
-  // and every pre-existing event remains open for check-in by default.
-  const columns = await db.execute('PRAGMA table_info(events)');
-  const existing = new Set(columns.rows.map((column) => String(column.name)));
+  // Legacy column additions for events (all pre-owner_id columns).
+  const updatedEventCols = await db.execute('PRAGMA table_info(events)');
+  const allEventCols = new Set(updatedEventCols.rows.map((r) => String(r.name)));
   for (const [column, statement] of [
     ['creator_name', 'ALTER TABLE events ADD COLUMN creator_name TEXT'],
-    ['start_time', 'ALTER TABLE events ADD COLUMN start_time TEXT'],
-    ['location', 'ALTER TABLE events ADD COLUMN location TEXT'],
-    ['check_in_open', 'ALTER TABLE events ADD COLUMN check_in_open INTEGER NOT NULL DEFAULT 1'],
+    ['start_time',   'ALTER TABLE events ADD COLUMN start_time TEXT'],
+    ['location',     'ALTER TABLE events ADD COLUMN location TEXT'],
+    ['check_in_open','ALTER TABLE events ADD COLUMN check_in_open INTEGER NOT NULL DEFAULT 1'],
+    ['owner_id',     'ALTER TABLE events ADD COLUMN owner_id TEXT REFERENCES users(id)'],
   ]) {
-    if (existing.has(column)) continue;
+    if (allEventCols.has(column)) continue;
     try {
       await db.execute(statement);
     } catch (error) {
-      // Two serverless instances may discover the missing column at once.
-      const updatedColumns = await db.execute('PRAGMA table_info(events)');
-      if (!updatedColumns.rows.some((row) => row.name === column)) {
-        throw error;
-      }
+      const recheckCols = await db.execute('PRAGMA table_info(events)');
+      if (!recheckCols.rows.some((r) => r.name === column)) throw error;
     }
-    existing.add(column);
+    allEventCols.add(column);
   }
 
-  const attendeeColumns = await db.execute('PRAGMA table_info(attendees)');
-  const existingAttendeeColumns = new Set(attendeeColumns.rows.map((column) => String(column.name)));
+  // Legacy column additions for attendees.
+  const attendeeCols = await db.execute('PRAGMA table_info(attendees)');
+  const allAttendeeCols = new Set(attendeeCols.rows.map((r) => String(r.name)));
   for (const [column, statement] of [
     ['first_name_key', 'ALTER TABLE attendees ADD COLUMN first_name_key TEXT'],
-    ['last_name_key', 'ALTER TABLE attendees ADD COLUMN last_name_key TEXT'],
+    ['last_name_key',  'ALTER TABLE attendees ADD COLUMN last_name_key TEXT'],
   ]) {
-    if (existingAttendeeColumns.has(column)) continue;
+    if (allAttendeeCols.has(column)) continue;
     try {
       await db.execute(statement);
     } catch (error) {
-      const updatedColumns = await db.execute('PRAGMA table_info(attendees)');
-      if (!updatedColumns.rows.some((row) => row.name === column)) throw error;
+      const recheckCols = await db.execute('PRAGMA table_info(attendees)');
+      if (!recheckCols.rows.some((r) => r.name === column)) throw error;
     }
-    existingAttendeeColumns.add(column);
+    allAttendeeCols.add(column);
   }
 
   await db.execute('CREATE INDEX IF NOT EXISTS idx_attendees_event_name ON attendees (event_id, first_name_key, last_name_key)');
@@ -123,6 +151,13 @@ export async function initSchema(): Promise<void> {
   await _schemaPromise;
 }
 
+export interface User {
+  id: string;
+  username: string;
+  password_hash: string;
+  created_at: string;
+}
+
 export interface Event {
   id: string;
   name: string;
@@ -131,6 +166,7 @@ export interface Event {
   start_time: string | null;
   location: string | null;
   check_in_open: number;
+  owner_id: string | null;
   created_at: string;
   attendee_count?: number;
 }

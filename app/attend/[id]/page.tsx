@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useRef } from 'react';
 import Image from 'next/image';
+import { startVisiblePolling } from '@/lib/visible-polling.mts';
+import { sendCheckInWithRetry } from '@/lib/check-in-request.mts';
 
 const S = {
   bg: '#060606', surface: '#111111', surface2: '#1a1a1a',
@@ -10,7 +12,7 @@ const S = {
   snow: '#FBFAFA', muted: 'rgba(251,250,250,0.50)', muted2: 'rgba(251,250,250,0.30)',
 };
 
-interface Event { id: string; name: string; date: string; }
+interface Event { name: string; date: string; start_time: string | null; location: string | null; check_in_open: number; }
 type PageState = 'loading' | 'form' | 'success' | 'error';
 
 export default function AttendPage({ params }: { params: Promise<{ id: string }> }) {
@@ -21,10 +23,15 @@ export default function AttendPage({ params }: { params: Promise<{ id: string }>
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [fieldError, setFieldError] = useState('');
+  const [duplicateWarning, setDuplicateWarning] = useState(false);
+  const requestRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => { requestRef.current?.abort(); }, []);
 
   useEffect(() => {
-    fetch(`/api/events/${id}/public`)
+    fetch(`/api/events/${id}/public`, { cache: 'no-store' })
       .then(async (res) => {
         if (!res.ok) { setPageState('error'); return; }
         const data = await res.json();
@@ -34,22 +41,74 @@ export default function AttendPage({ params }: { params: Promise<{ id: string }>
       .catch(() => setPageState('error'));
   }, [id]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const hasEvent = event !== null;
+  useEffect(() => {
+    if (pageState !== 'form' || !hasEvent) return;
+    return startVisiblePolling(async (signal) => {
+      const res = await fetch(`/api/events/${id}/public`, { cache: 'no-store', signal });
+      if (signal.aborted) return;
+      if (res.status === 404) { setPageState('error'); return; }
+      if (res.ok) {
+        const data: { event: Event } = await res.json();
+        if (!signal.aborted) {
+          setEvent(data.event);
+          if (data.event.check_in_open === 0) setDuplicateWarning(false);
+        }
+      }
+    });
+  }, [id, pageState, hasEvent]);
+
+  const submit = async (confirmDuplicate = false) => {
+    if (requestRef.current) return;
     if (!firstName.trim() || !lastName.trim()) { setFieldError('Please fill in both fields.'); return; }
+    const controller = new AbortController();
+    requestRef.current = controller;
     setFieldError('');
     setSubmitting(true);
-    const res = await fetch(`/api/events/${id}/attend`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ first_name: firstName.trim(), last_name: lastName.trim() }),
-    });
-    if (res.ok) setPageState('success');
-    else {
-      const data = await res.json();
-      setFieldError(data.error ?? 'Something went wrong.');
+    try {
+      const res = await sendCheckInWithRetry(
+        `/api/events/${id}/attend`,
+        { first_name: firstName, last_name: lastName, confirm_duplicate: confirmDuplicate },
+        { signal: controller.signal, onPreparing: () => setPreparing(true) },
+      );
+      if (controller.signal.aborted) return;
+      if (res.ok) {
+        setDuplicateWarning(false);
+        setPageState('success');
+      } else {
+        const data = await res.json();
+        if (res.status === 409 && data.code === 'DUPLICATE_NAME') {
+          setDuplicateWarning(true);
+        } else if (res.status === 403 && data.code === 'CHECK_IN_CLOSED') {
+          setDuplicateWarning(false);
+          setEvent((current) => current && { ...current, check_in_open: 0 });
+        } else {
+          setFieldError(data.error ?? 'Something went wrong. Please try again.');
+        }
+      }
+    } catch {
+      if (!controller.signal.aborted) setFieldError('Unable to connect. Please try again.');
+    } finally {
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        if (!controller.signal.aborted) {
+          setSubmitting(false);
+          setPreparing(false);
+        }
+      }
     }
+  };
+
+  const cancelPreparation = () => {
+    requestRef.current?.abort();
+    requestRef.current = null;
     setSubmitting(false);
+    setPreparing(false);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void submit();
   };
 
   const inputStyle = { background: S.surface2, border: `1px solid ${S.border}`, color: S.snow };
@@ -78,6 +137,22 @@ export default function AttendPage({ params }: { params: Promise<{ id: string }>
         <p className="text-sm" style={{ color: S.muted }}>This QR code may be invalid or the event no longer exists.</p>
       </div>
     </div>
+  );
+
+  // Let a request already in flight decide whether it succeeded or was closed.
+  if (pageState === 'form' && event?.check_in_open === 0 && !submitting) return (
+    <main className="min-h-screen flex flex-col items-center justify-center px-4 text-center" style={{ background: S.bg }}>
+      <Image src="/epam-logo.svg" alt="EPAM" width={90} height={32} className="mb-8" />
+      <div className="w-full max-w-sm rounded-sm p-7" style={{ background: S.surface, border: `1px solid ${S.border}` }}>
+        <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: S.sea }}>EPAM Event</p>
+        <h1 className="text-2xl font-black" style={{ color: S.snow }}>{event.name}</h1>
+        <p className="text-sm mt-2" style={{ color: S.muted }}>{event.date}{event.start_time ? ` · ${event.start_time}` : ''}</p>
+        {event.location && <p className="text-sm mt-1" style={{ color: S.muted }}>{event.location}</p>}
+        <div className="h-px my-6" style={{ background: S.border }} />
+        <h2 className="text-lg font-bold" style={{ color: S.snow }}>Check-in is closed</h2>
+        <p className="text-sm mt-2" style={{ color: S.muted }}>This event is not accepting new check-ins right now.</p>
+      </div>
+    </main>
   );
 
   /* ── SUCCESS ── */
@@ -112,7 +187,8 @@ export default function AttendPage({ params }: { params: Promise<{ id: string }>
         </p>
 
         <div className="mt-8 px-5 py-3 rounded-sm text-sm" style={{ background: S.surface, border: `1px solid ${S.border}`, color: S.muted }}>
-          {event?.date}
+          {event?.date}{event?.start_time ? ` · ${event.start_time}` : ''}
+          {event?.location && <span className="block mt-1">{event.location}</span>}
         </div>
       </div>
 
@@ -144,8 +220,9 @@ export default function AttendPage({ params }: { params: Promise<{ id: string }>
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25" />
               </svg>
-              {event?.date}
+              {event?.date}{event?.start_time ? ` · ${event.start_time}` : ''}
             </div>
+            {event?.location && <p className="text-sm" style={{ color: S.muted }}>{event.location}</p>}
           </div>
 
           {/* Form card */}
@@ -157,31 +234,53 @@ export default function AttendPage({ params }: { params: Promise<{ id: string }>
               <form onSubmit={handleSubmit} className="space-y-3">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>First Name</label>
-                  <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)}
-                    required autoFocus autoComplete="given-name" placeholder="e.g. John"
+                  <input type="text" value={firstName} onChange={(e) => { setFirstName(e.target.value); setDuplicateWarning(false); setFieldError(''); }}
+                    required maxLength={100} disabled={submitting} autoFocus autoComplete="given-name" placeholder="e.g. John"
                     className="w-full rounded-sm px-4 py-3 text-sm outline-none transition-all" style={inputStyle}
                     onFocus={inputFocus} onBlur={inputBlur} />
                 </div>
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>Last Name</label>
-                  <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)}
-                    required autoComplete="family-name" placeholder="e.g. Smith"
+                  <input type="text" value={lastName} onChange={(e) => { setLastName(e.target.value); setDuplicateWarning(false); setFieldError(''); }}
+                    required maxLength={100} disabled={submitting} autoComplete="family-name" placeholder="e.g. Smith"
                     className="w-full rounded-sm px-4 py-3 text-sm outline-none transition-all" style={inputStyle}
                     onFocus={inputFocus} onBlur={inputBlur} />
                 </div>
 
                 {fieldError && <p className="text-sm" style={{ color: '#FF6B6B' }}>{fieldError}</p>}
+                {preparing && <p role="status" className="text-sm" style={{ color: S.sea }}>Preparing check-in for this event. Please wait a moment…</p>}
 
-                <button type="submit" disabled={submitting}
-                  className="w-full font-bold text-sm py-3.5 rounded-sm uppercase tracking-widest transition-opacity disabled:opacity-50 flex items-center justify-center gap-2 mt-1"
-                  style={{ background: S.cobalt, color: S.snow }}>
-                  {submitting ? (
-                    <>
-                      <div className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid rgba(255,255,255,0.3)', borderTopColor: S.snow }} />
-                      Checking in...
-                    </>
-                  ) : 'Check In'}
-                </button>
+                {duplicateWarning ? (
+                  <div role="alert" className="space-y-3 rounded-sm p-4" style={{ background: 'rgba(184,150,255,0.10)', border: '1px solid rgba(184,150,255,0.35)' }}>
+                    <p className="text-sm" style={{ color: S.snow }}>
+                      Someone with this name has already checked in. If this is you, you are all set. If you are a different person with the same name, confirm below.
+                    </p>
+                    <button type="button" disabled={submitting} onClick={() => void submit(true)}
+                      className="w-full py-2.5 text-sm font-bold rounded-sm disabled:opacity-50" style={{ background: S.cobalt, color: S.snow }}>
+                      {submitting ? 'Checking in...' : 'Check in anyway'}
+                    </button>
+                    <button type="button" disabled={submitting} onClick={() => setDuplicateWarning(false)} className="w-full py-2 text-sm underline disabled:opacity-50" style={{ color: S.muted }}>
+                      Edit name
+                    </button>
+                  </div>
+                ) : (
+                  <button type="submit" disabled={submitting}
+                    className="w-full font-bold text-sm py-3.5 rounded-sm uppercase tracking-widest transition-opacity disabled:opacity-50 flex items-center justify-center gap-2 mt-1"
+                    style={{ background: S.cobalt, color: S.snow }}>
+                    {submitting ? (
+                      <>
+                        <div className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid rgba(255,255,255,0.3)', borderTopColor: S.snow }} />
+                        Checking in...
+                      </>
+                    ) : 'Check In'}
+                  </button>
+                )}
+                {preparing && (
+                  <div className="text-center">
+                    <button type="button" onClick={cancelPreparation} className="py-2 text-sm underline" style={{ color: S.muted }}>Stop waiting</button>
+                    <p className="text-xs" style={{ color: S.muted2 }}>A request may still finish on the server. Please check with the organizer before submitting again.</p>
+                  </div>
+                )}
               </form>
             </div>
           </div>

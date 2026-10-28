@@ -4,12 +4,16 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { startVisiblePolling } from '@/lib/visible-polling.mts';
+import { filterEvents } from '@/lib/event-search.mts';
 
 interface Event {
   id: string;
   name: string;
   date: string;
   creator_name: string | null;
+  start_time: string | null;
+  location: string | null;
+  check_in_open: number;
   created_at: string;
   attendee_count: number;
 }
@@ -44,6 +48,8 @@ export default function AdminPage() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventSearch, setEventSearch] = useState('');
+  const matchingEvents = filterEvents(events, eventSearch);
 
   useEffect(() => {
     fetch('/api/auth')
@@ -218,6 +224,23 @@ export default function AdminPage() {
           <p className="text-xs mt-1" style={{ color: S.sea }}>● Live · updates every 5 seconds</p>
         </div>
 
+        {events.length > 0 && (
+          <div className="mb-5">
+            <label htmlFor="event-search" className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: S.muted }}>
+              Search events
+            </label>
+            <input id="event-search" type="search" value={eventSearch} onChange={(e) => setEventSearch(e.target.value)}
+              placeholder="Name, creator, date, or location"
+              className="w-full rounded-sm px-4 py-2.5 text-sm outline-none"
+              style={{ background: S.surface, border: `1px solid ${S.border}`, color: S.snow }} />
+            {eventSearch.trim() && (
+              <p role="status" className="text-xs mt-2" style={{ color: S.muted }}>
+                Showing {matchingEvents.length} of {events.length} events
+              </p>
+            )}
+          </div>
+        )}
+
         {eventsLoading ? (
           <div className="flex justify-center py-20">
             <div className="w-5 h-5 rounded-full animate-spin" style={{ border: `2px solid ${S.border}`, borderTopColor: S.sea }} />
@@ -237,9 +260,14 @@ export default function AdminPage() {
               Create Event
             </Link>
           </div>
+        ) : matchingEvents.length === 0 ? (
+          <div className="rounded-sm text-center py-12 px-5" style={{ background: S.surface, border: `1px solid ${S.border}` }}>
+            <p className="text-sm" style={{ color: S.muted }}>No events match your search.</p>
+            <button type="button" onClick={() => setEventSearch('')} className="text-sm underline mt-3" style={{ color: S.sea }}>Clear search</button>
+          </div>
         ) : (
           <div className="space-y-2">
-            {events.map((event) => (
+            {matchingEvents.map((event) => (
               <Link
                 key={event.id}
                 href={`/admin/events/${event.id}`}
@@ -254,7 +282,7 @@ export default function AdminPage() {
                   (e.currentTarget as HTMLElement).style.background = S.surface;
                 }}
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 min-w-0">
                   {/* Date block */}
                   <div
                     className="w-11 h-11 rounded-sm flex flex-col items-center justify-center flex-shrink-0"
@@ -267,15 +295,19 @@ export default function AdminPage() {
                       {new Date(event.date + 'T00:00:00').getDate()}
                     </span>
                   </div>
-                  <div>
-                    <p className="font-semibold text-sm" style={{ color: S.snow }}>{event.name}</p>
-                    <p className="text-xs mt-0.5" style={{ color: S.muted }}>{event.date}</p>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm truncate" style={{ color: S.snow }}>{event.name}</p>
+                    <p className="text-xs mt-0.5" style={{ color: S.muted }}>{event.date}{event.start_time ? ` · ${event.start_time}` : ''}</p>
+                    {event.location && <p className="text-xs mt-0.5 truncate" style={{ color: S.muted }}>{event.location}</p>}
                     {event.creator_name && (
-                      <p className="text-xs mt-0.5" style={{ color: S.muted }}>Created by {event.creator_name}</p>
+                      <p className="text-xs mt-0.5 truncate" style={{ color: S.muted }}>Created by {event.creator_name}</p>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <span className="text-xs" style={{ color: event.check_in_open ? S.sea : '#FFAAAA' }}>
+                    {event.check_in_open ? 'Open' : 'Closed'}
+                  </span>
                   <div className="text-right">
                     <span className="text-xl font-black" aria-live="polite" style={{ color: S.sea }}>{event.attendee_count}</span>
                     <p className="text-xs leading-none mt-0.5" style={{ color: S.muted }}>

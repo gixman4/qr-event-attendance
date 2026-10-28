@@ -25,7 +25,7 @@ export async function GET(
   const event = eventResult.rows[0] as unknown as { id: string; name: string; date: string; created_at: string };
 
   const attendeesResult = await db.execute({
-    sql: 'SELECT * FROM attendees WHERE event_id = ? ORDER BY registered_at ASC',
+    sql: 'SELECT * FROM attendees WHERE event_id = ? ORDER BY registered_at ASC, rowid ASC',
     args: [id],
   });
 

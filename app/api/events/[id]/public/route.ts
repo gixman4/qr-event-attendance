@@ -1,6 +1,6 @@
 import { getDb, initSchema } from '@/lib/db';
 
-// Only the event name and date are needed on the public check-in page.
+// Only event details and check-in status are public; attendee data stays private.
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -9,7 +9,7 @@ export async function GET(
   const db = getDb();
   await initSchema();
   const result = await db.execute({
-    sql: 'SELECT name, date FROM events WHERE id = ?',
+    sql: 'SELECT name, date, start_time, location, check_in_open FROM events WHERE id = ?',
     args: [id],
   });
   if (result.rows.length === 0) {

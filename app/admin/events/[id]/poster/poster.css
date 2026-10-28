@@ -51,6 +51,7 @@
 .poster-rule { width: 84px; height: 3px; margin: 18px 0 30px; background: var(--epam-sea); }
 .poster-event-title { max-width: 100%; font-size: clamp(30px, 5vw, 50px); line-height: 1.1; font-weight: 900; overflow-wrap: anywhere; }
 .poster-date { margin-top: 14px; font-size: 21px; color: var(--epam-sky); }
+.poster-location { margin-top: 8px; font-size: 17px; color: var(--epam-muted); }
 
 .poster-qr {
   width: min(100%, 390px);
@@ -105,7 +106,7 @@
     -webkit-print-color-adjust: exact;
   }
   .poster-logo { filter: invert(1); }
-  .poster-brand, .poster-footer, .poster-subline { color: #434343 !important; }
+  .poster-brand, .poster-footer, .poster-subline, .poster-location { color: #434343 !important; }
   .poster-kicker, .poster-date { color: #0047FF !important; }
   .poster-rule, .poster-footer-mark { background: #0047FF !important; }
   .poster-qr { width: 112mm; height: 112mm; margin: 10mm auto 8mm; background: #fff !important; border: 1px solid #ddd; }

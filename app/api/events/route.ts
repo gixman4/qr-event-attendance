@@ -1,6 +1,7 @@
 import { getDb, initSchema } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { randomUUID } from 'crypto';
+import { parseEventExtras } from '@/lib/event-fields';
 
 // GET /api/events — list all events with attendee counts (protected)
 export async function GET() {
@@ -23,6 +24,9 @@ export async function GET() {
     name: r.name,
     date: r.date,
     creator_name: r.creator_name,
+    start_time: r.start_time,
+    location: r.location,
+    check_in_open: Number(r.check_in_open),
     created_at: r.created_at,
     attendee_count: Number(r.attendee_count ?? 0),
   }));
@@ -35,7 +39,7 @@ export async function POST(request: Request) {
   const unauth = await requireAuth();
   if (unauth) return unauth;
 
-  const { creator_name, name, date } = await request.json();
+  const { creator_name, name, date, start_time, location } = await request.json();
   if (typeof creator_name !== 'string' || !creator_name.trim()) {
     return Response.json({ error: 'Created by is required.' }, { status: 400 });
   }
@@ -45,14 +49,16 @@ export async function POST(request: Request) {
   if (typeof name !== 'string' || !name.trim() || typeof date !== 'string' || !date.trim()) {
     return Response.json({ error: 'Name and date are required.' }, { status: 400 });
   }
+  const extras = parseEventExtras(start_time, location);
+  if ('error' in extras) return Response.json({ error: extras.error }, { status: 400 });
 
   const db = getDb();
   await initSchema();
   const id = randomUUID();
 
   await db.execute({
-    sql: 'INSERT INTO events (id, name, date, creator_name) VALUES (?, ?, ?, ?)',
-    args: [id, name.trim(), date.trim(), creator_name.trim()],
+    sql: 'INSERT INTO events (id, name, date, creator_name, start_time, location) VALUES (?, ?, ?, ?, ?, ?)',
+    args: [id, name.trim(), date.trim(), creator_name.trim(), extras.startTime, extras.location],
   });
 
   const result = await db.execute({

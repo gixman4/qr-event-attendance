@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "test:integration": "node --test tests/integration.test.mjs",
-    "test:polling": "node --test tests/visible-polling.test.mjs"
+    "test:polling": "node --test tests/visible-polling.test.mjs",
+    "test:search": "node --test tests/event-search.test.mjs",
+    "test:checkin": "node --test tests/check-in-request.test.mjs",
+    "test:browser": "node --test tests/browser-smoke.test.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { startVisiblePolling } from '@/lib/visible-polling.mts';
+import { filterAttendees } from '@/lib/event-search.mts';
 
 const S = {
   bg: '#060606', surface: '#111111', surface2: '#1a1a1a',
@@ -13,7 +14,16 @@ const S = {
   snow: '#FBFAFA', muted: 'rgba(251,250,250,0.50)', muted2: 'rgba(251,250,250,0.25)',
 };
 
-interface Event { id: string; name: string; date: string; creator_name: string | null; created_at: string; }
+interface Event {
+  id: string;
+  name: string;
+  date: string;
+  creator_name: string | null;
+  start_time: string | null;
+  location: string | null;
+  check_in_open: number;
+  created_at: string;
+}
 interface Attendee { id: string; first_name: string; last_name: string; registered_at: string; }
 
 function getInitials(f: string, l: string) { return `${f[0] ?? ''}${l[0] ?? ''}`.toUpperCase(); }
@@ -52,6 +62,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
 
   const [event, setEvent] = useState<Event | null>(null);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
+  const [attendeeSearch, setAttendeeSearch] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -60,28 +71,39 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showAddPerson, setShowAddPerson] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   const [editName, setEditName] = useState('');
   const [editDate, setEditDate] = useState('');
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editLocation, setEditLocation] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState('');
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusError, setStatusError] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [addFirst, setAddFirst] = useState('');
   const [addLast, setAddLast] = useState('');
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
   const attendeeRevision = useRef(0);
+  const eventRevision = useRef(0);
 
   const attendUrl = typeof window !== 'undefined' ? `${window.location.origin}/attend/${id}` : `/attend/${id}`;
+  const matchingAttendees = filterAttendees(attendees, attendeeSearch);
 
   const loadData = async () => {
+    const eventVersion = eventRevision.current;
     try {
       const res = await fetch(`/api/events/${id}`, { cache: 'no-store' });
       if (res.status === 401) { router.replace('/admin'); return; }
       if (!res.ok) return;
       const data = await res.json();
       attendeeRevision.current++;
-      setEvent(data.event);
+      if (eventVersion === eventRevision.current) {
+        eventRevision.current++;
+        setEvent(data.event);
+      }
       setAttendees(data.attendees);
     } catch {
       // Leave the currently displayed attendees intact on network errors.
@@ -106,12 +128,16 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
     if (loading || error || !hasEvent) return;
     return startVisiblePolling(async (signal) => {
       const revision = attendeeRevision.current;
+      const eventVersion = eventRevision.current;
       const res = await fetch(`/api/events/${id}`, { cache: 'no-store', signal });
       if (signal.aborted) return;
       if (res.status === 401) {
         router.replace('/admin');
       } else if (res.ok) {
-        const data: { attendees: Attendee[] } = await res.json();
+        const data: { event: Event; attendees: Attendee[] } = await res.json();
+        if (!signal.aborted && eventVersion === eventRevision.current) {
+          setEvent(data.event);
+        }
         if (!signal.aborted && revision === attendeeRevision.current) {
           setAttendees(data.attendees);
         }
@@ -120,21 +146,44 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   }, [id, loading, error, hasEvent, router]);
 
   useEffect(() => {
-    if (!event) return;
+    if (!hasEvent) return;
     import('qrcode').then((QRCode) => {
       const url = typeof window !== 'undefined' ? `${window.location.origin}/attend/${id}` : `/attend/${id}`;
       QRCode.toDataURL(url, { width: 300, margin: 2, color: { dark: '#060606', light: '#FBFAFA' } }).then(setQrDataUrl);
     });
-  }, [event, id]);
+  }, [hasEvent, id]);
 
   const copyLink = async () => { await navigator.clipboard.writeText(attendUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault(); setEditLoading(true); setEditError('');
-    const res = await fetch(`/api/events/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: editName, date: editDate }) });
-    if (res.ok) { setEvent(await res.json()); setShowEdit(false); }
+    const res = await fetch(`/api/events/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: editName, date: editDate, start_time: editStartTime, location: editLocation }) });
+    if (res.ok) { eventRevision.current++; setEvent(await res.json()); setShowEdit(false); }
     else { const d = await res.json(); setEditError(d.error ?? 'Failed to update.'); }
     setEditLoading(false);
+  };
+
+  const updateCheckIn = async (open: boolean) => {
+    setStatusLoading(true);
+    setStatusError('');
+    try {
+      const res = await fetch(`/api/events/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ check_in_open: open }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setStatusError(data.error ?? 'Unable to update check-in.');
+        return;
+      }
+      eventRevision.current++;
+      setEvent(await res.json());
+      setShowCloseConfirm(false);
+    } catch {
+      setStatusError('Unable to update check-in. Please try again.');
+    } finally {
+      setStatusLoading(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -206,7 +255,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3" /></svg>
               Export
             </a>
-            <button onClick={() => { setEditName(event.name); setEditDate(event.date); setEditError(''); setShowEdit(true); }}
+            <button onClick={() => { setEditName(event.name); setEditDate(event.date); setEditStartTime(event.start_time ?? ''); setEditLocation(event.location ?? ''); setEditError(''); setShowEdit(true); }}
               aria-label="Edit event"
               className="w-8 h-8 flex items-center justify-center rounded-sm transition-colors" style={{ border: `1px solid ${S.border}`, color: S.muted }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = S.sea; e.currentTarget.style.color = S.sea; }}
@@ -227,9 +276,31 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
           <div>
             <h1 className="text-2xl font-black tracking-tight" style={{ color: S.snow }}>{event.name}</h1>
             <p className="text-sm mt-0.5" style={{ color: S.muted }}>{event.date}</p>
+            {event.start_time && <p className="text-sm mt-1" style={{ color: S.muted }}>Time: {event.start_time}</p>}
+            {event.location && <p className="text-sm mt-1" style={{ color: S.muted }}>Location: {event.location}</p>}
             {event.creator_name && (
               <p className="text-sm mt-1" style={{ color: S.muted }}>Created by {event.creator_name}</p>
             )}
+            <div className="flex items-center flex-wrap gap-3 mt-4">
+              <span role="status" className="text-xs font-semibold px-3 py-1.5 rounded-sm"
+                style={{ color: event.check_in_open ? S.sea : '#FFAAAA', background: event.check_in_open ? 'rgba(0,246,255,0.10)' : 'rgba(255,107,107,0.10)' }}>
+                {event.check_in_open ? '● Check-in open' : '● Check-in closed'}
+              </span>
+              <button type="button" disabled={statusLoading}
+                onClick={() => {
+                  if (event.check_in_open) {
+                    setStatusError('');
+                    setShowCloseConfirm(true);
+                  } else {
+                    void updateCheckIn(true);
+                  }
+                }}
+                className="text-xs font-semibold px-3 py-1.5 rounded-sm disabled:opacity-50"
+                style={{ color: event.check_in_open ? '#FFAAAA' : S.sea, border: `1px solid ${S.border}` }}>
+                {statusLoading ? 'Updating...' : event.check_in_open ? 'Close check-in' : 'Reopen check-in'}
+              </button>
+            </div>
+            {statusError && <p role="alert" className="text-sm mt-2" style={{ color: '#FFAAAA' }}>{statusError}</p>}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -316,13 +387,35 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                   </div>
                 </div>
 
+                {attendees.length > 0 && (
+                  <div className="mb-4">
+                    <label htmlFor="attendee-search" className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: S.muted }}>
+                      Search attendees
+                    </label>
+                    <input id="attendee-search" type="search" value={attendeeSearch}
+                      onChange={(e) => setAttendeeSearch(e.target.value)} placeholder="First or last name"
+                      className="w-full rounded-sm px-3 py-2 text-sm outline-none"
+                      style={{ background: S.surface2, border: `1px solid ${S.border}`, color: S.snow }} />
+                    {attendeeSearch.trim() && (
+                      <p role="status" className="text-xs mt-1" style={{ color: S.muted }}>
+                        Showing {matchingAttendees.length} of {attendees.length} attendees · Excel exports everyone
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {attendees.length === 0 ? (
                   <div className="flex-1 flex flex-col items-center justify-center gap-2 py-8">
                     <p className="text-sm text-center" style={{ color: S.muted }}>No check-ins yet.<br />Share the QR code!</p>
                   </div>
+                ) : matchingAttendees.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-2 py-8">
+                    <p className="text-sm text-center" style={{ color: S.muted }}>No attendees match your search.</p>
+                    <button type="button" onClick={() => setAttendeeSearch('')} className="text-sm underline" style={{ color: S.sea }}>Clear search</button>
+                  </div>
                 ) : (
                   <div className="overflow-y-auto max-h-72 space-y-0.5">
-                    {attendees.map((a, i) => {
+                    {matchingAttendees.map((a, i) => {
                       const av = avatarStyle(i);
                       return (
                         <div key={a.id} className="group flex items-center gap-3 px-2 py-2 rounded-sm transition-colors"
@@ -374,6 +467,18 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                   onFocus={inputFocus} onBlur={inputBlur} />
               </div>
             ))}
+            <div className="space-y-1.5">
+              <label htmlFor="edit-time" className="block text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>Time (optional)</label>
+              <input id="edit-time" type="time" value={editStartTime} onChange={(e) => setEditStartTime(e.target.value)}
+                className="w-full rounded-sm px-4 py-3 text-sm outline-none"
+                style={{ ...inputStyle, colorScheme: 'dark' }} onFocus={inputFocus} onBlur={inputBlur} />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="edit-location" className="block text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>Location (optional)</label>
+              <input id="edit-location" type="text" value={editLocation} onChange={(e) => setEditLocation(e.target.value)} maxLength={200}
+                className="w-full rounded-sm px-4 py-3 text-sm outline-none" style={inputStyle}
+                onFocus={inputFocus} onBlur={inputBlur} placeholder="e.g. Main conference room" />
+            </div>
             {editError && <p className="text-sm" style={{ color: '#FF6B6B' }}>{editError}</p>}
             <div className="flex gap-2 pt-1">
               <button type="button" onClick={() => setShowEdit(false)} className="flex-1 py-2.5 rounded-sm text-sm font-medium" style={{ border: `1px solid ${S.border}`, color: S.muted }}>Cancel</button>
@@ -382,6 +487,25 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {showCloseConfirm && (
+        <Modal title="Close Check-in" accent="#FF6B6B" onClose={() => setShowCloseConfirm(false)}>
+          <div className="space-y-4">
+            <p className="text-sm" style={{ color: S.muted }}>
+              New QR check-ins will stop immediately. You can still add someone manually, and reopening will use the same QR code.
+            </p>
+            {statusError && <p role="alert" className="text-sm" style={{ color: '#FFAAAA' }}>{statusError}</p>}
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setShowCloseConfirm(false)}
+                className="flex-1 py-2.5 rounded-sm text-sm font-medium" style={{ border: `1px solid ${S.border}`, color: S.muted }}>Cancel</button>
+              <button type="button" onClick={() => void updateCheckIn(false)} disabled={statusLoading}
+                className="flex-1 py-2.5 rounded-sm text-sm font-bold disabled:opacity-50" style={{ background: '#CC3333', color: S.snow }}>
+                {statusLoading ? 'Closing...' : 'Close check-in'}
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
 

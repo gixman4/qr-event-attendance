@@ -11,7 +11,14 @@ function formatDate(date: string): string {
     : new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeZone: 'UTC' }).format(value);
 }
 
-export default function Poster({ id, name, date }: { id: string; name: string; date: string }) {
+export default function Poster({ id, name, date, startTime, location, checkInOpen }: {
+  id: string;
+  name: string;
+  date: string;
+  startTime: string | null;
+  location: string | null;
+  checkInOpen: boolean;
+}) {
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [checkInUrl, setCheckInUrl] = useState('');
   const [qrError, setQrError] = useState(false);
@@ -59,7 +66,8 @@ export default function Poster({ id, name, date }: { id: string; name: string; d
           <p className="poster-kicker">EVENT CHECK-IN</p>
           <div className="poster-rule" aria-hidden="true" />
           <h1 className="poster-event-title">{name}</h1>
-          <p className="poster-date">{formatDate(date)}</p>
+          <p className="poster-date">{formatDate(date)}{startTime ? ` · ${startTime}` : ''}</p>
+          {location && <p className="poster-location">{location}</p>}
 
           <div className="poster-qr" aria-live="polite">
             {qrDataUrl ? (
@@ -71,8 +79,10 @@ export default function Poster({ id, name, date }: { id: string; name: string; d
             )}
           </div>
 
-          <h2 className="poster-instruction">Scan to check in</h2>
-          <p className="poster-subline">Enter your first and last name to register your attendance.</p>
+          <h2 className="poster-instruction">{checkInOpen ? 'Scan to check in' : 'Check-in is closed'}</h2>
+          <p className="poster-subline">
+            {checkInOpen ? 'Enter your first and last name to register your attendance.' : 'This event is not accepting new check-ins right now.'}
+          </p>
         </div>
 
         <footer className="poster-footer">

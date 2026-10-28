@@ -10,11 +10,21 @@ export default async function PosterPage({ params }: { params: Promise<{ id: str
   const { id } = await params;
   await initSchema();
   const result = await getDb().execute({
-    sql: 'SELECT name, date FROM events WHERE id = ?',
+    sql: 'SELECT name, date, start_time, location, check_in_open FROM events WHERE id = ?',
     args: [id],
   });
 
   if (result.rows.length === 0) notFound();
 
-  return <Poster id={id} name={String(result.rows[0].name)} date={String(result.rows[0].date)} />;
+  const event = result.rows[0];
+  return (
+    <Poster
+      id={id}
+      name={String(event.name)}
+      date={String(event.date)}
+      startTime={event.start_time === null ? null : String(event.start_time)}
+      location={event.location === null ? null : String(event.location)}
+      checkInOpen={Number(event.check_in_open) === 1}
+    />
+  );
 }

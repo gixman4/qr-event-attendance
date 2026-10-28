@@ -18,6 +18,8 @@ export default function CreateEventPage() {
   const [name, setName] = useState('');
   const today = new Date().toISOString().split('T')[0];
   const [date, setDate] = useState(today);
+  const [startTime, setStartTime] = useState('');
+  const [location, setLocation] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -28,7 +30,7 @@ export default function CreateEventPage() {
     const res = await fetch('/api/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ creator_name: creatorName, name, date }),
+      body: JSON.stringify({ creator_name: creatorName, name, date, start_time: startTime, location }),
     });
     if (res.ok) {
       const event = await res.json();
@@ -126,6 +128,40 @@ export default function CreateEventPage() {
                   color: S.snow,
                   colorScheme: 'dark',
                 }}
+                onFocus={(e) => e.currentTarget.style.borderColor = S.sea}
+                onBlur={(e) => e.currentTarget.style.borderColor = S.border}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="event-time" className="block text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>
+                Time <span className="normal-case tracking-normal">(optional)</span>
+              </label>
+              <input
+                id="event-time"
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-full rounded-sm px-4 py-3 text-sm outline-none transition-all"
+                style={{ background: S.surface2, border: `1px solid ${S.border}`, color: S.snow, colorScheme: 'dark' }}
+                onFocus={(e) => e.currentTarget.style.borderColor = S.sea}
+                onBlur={(e) => e.currentTarget.style.borderColor = S.border}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="event-location" className="block text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>
+                Location <span className="normal-case tracking-normal">(optional)</span>
+              </label>
+              <input
+                id="event-location"
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                maxLength={200}
+                placeholder="e.g. Main conference room"
+                className="w-full rounded-sm px-4 py-3 text-sm outline-none transition-all"
+                style={{ background: S.surface2, border: `1px solid ${S.border}`, color: S.snow }}
                 onFocus={(e) => e.currentTarget.style.borderColor = S.sea}
                 onBlur={(e) => e.currentTarget.style.borderColor = S.border}
               />

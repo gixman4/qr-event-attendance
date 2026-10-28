@@ -1,11 +1,14 @@
 import { getDb, initSchema } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 
-// GET /api/events/[id] — public (attend page needs this)
+// GET /api/events/[id] — full event including attendee list (admin only)
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const unauth = await requireAuth();
+  if (unauth) return unauth;
+
   const { id } = await params;
   const db = getDb();
   await initSchema();

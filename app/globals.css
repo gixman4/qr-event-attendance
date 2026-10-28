@@ -1,24 +1,65 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f6fb;
-  --foreground: #0f172a;
+  /* EPAM Night (dark bg) */
+  --epam-night:    #060606;
+  --epam-surface:  #111111;
+  --epam-surface2: #1a1a1a;
+  --epam-border:   rgba(255, 255, 255, 0.08);
+  --epam-border-active: rgba(255, 255, 255, 0.20);
+
+  /* EPAM primary accent colours */
+  --epam-sea:    #00F6FF;
+  --epam-mint:   #00FFF0;
+  --epam-lilac:  #B896FF;
+  --epam-sky:    #7BA8FF;
+  --epam-cobalt: #0047FF;
+  --epam-aqua:   #0078C2;
+
+  /* Text */
+  --epam-snow:       #FBFAFA;
+  --epam-muted:      rgba(251, 250, 250, 0.50);
+  --epam-muted-soft: rgba(251, 250, 250, 0.30);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist);
+  --color-background: var(--epam-night);
+  --color-foreground: var(--epam-snow);
+  --font-sans: var(--font-source-sans);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--epam-night);
+  color: var(--epam-snow);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--epam-night);
+  color: var(--epam-snow);
+  font-family: var(--font-source-sans), 'Source Sans Pro', sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Smooth focus rings */
-input:focus-visible,
-button:focus-visible {
-  outline: 2px solid #1e40af;
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--epam-surface); }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid var(--epam-sea);
   outline-offset: 2px;
+}
+
+/* EPAM cyan glow utility */
+.epam-glow {
+  box-shadow: 0 0 30px rgba(0, 246, 255, 0.15);
+}
+
+.epam-glow-sm {
+  box-shadow: 0 0 12px rgba(0, 246, 255, 0.12);
 }

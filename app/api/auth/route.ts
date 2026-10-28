@@ -22,7 +22,11 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Invalid password.' }, { status: 401 });
   }
 
-  await setAuthCookie();
+  try {
+    await setAuthCookie();
+  } catch {
+    return Response.json({ error: 'Session authentication is not configured.' }, { status: 503 });
+  }
   return Response.json({ success: true });
 }
 

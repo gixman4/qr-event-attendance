@@ -1,48 +1,87 @@
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function Home() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
-      {/* Subtle grid pattern overlay */}
-      <div className="absolute inset-0 opacity-[0.03]" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
-      }} />
+    <main className="min-h-screen flex flex-col" style={{ background: '#060606' }}>
+      {/* Nav */}
+      <header className="flex items-center justify-between px-8 py-6">
+        <Image src="/epam-logo.svg" alt="EPAM" width={100} height={35} priority />
+      </header>
 
-      <div className="relative w-full max-w-sm text-center space-y-10">
-        {/* Logo */}
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl flex items-center justify-center shadow-2xl">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 19.5h.75v.75h-.75v-.75zM19.5 13.5h.75v.75h-.75v-.75zM19.5 19.5h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">QR Attendance</h1>
-            <p className="text-blue-300 text-sm mt-1.5">Event check-in, made simple</p>
-          </div>
-        </div>
+      {/* Hero */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 text-center relative overflow-hidden">
+        {/* Cyan glow blob behind headline */}
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] rounded-full pointer-events-none"
+          style={{
+            background: 'radial-gradient(ellipse at center, rgba(0,246,255,0.08) 0%, transparent 70%)',
+          }}
+        />
 
-        {/* Feature pills */}
-        <div className="flex flex-wrap justify-center gap-2">
-          {['Create events', 'Auto QR codes', 'Export to Excel'].map((f) => (
-            <span key={f} className="text-xs bg-white/10 text-blue-200 border border-white/10 px-3 py-1 rounded-full">
-              {f}
-            </span>
-          ))}
-        </div>
-
-        {/* CTA */}
-        <div className="space-y-3">
-          <Link
-            href="/admin"
-            className="block w-full bg-white text-blue-950 font-semibold py-3.5 px-6 rounded-xl hover:bg-blue-50 transition-colors shadow-lg text-sm"
+        <div className="relative z-10 max-w-lg space-y-8">
+          {/* Label */}
+          <p
+            className="text-xs font-semibold uppercase tracking-[0.2em]"
+            style={{ color: '#00F6FF' }}
           >
-            Go to Admin Dashboard
-          </Link>
-          <p className="text-blue-400 text-xs">Protected with a team password</p>
+            EPAM Internal Tool
+          </p>
+
+          {/* Headline */}
+          <div className="space-y-2">
+            <h1 className="text-5xl font-black tracking-tight" style={{ color: '#FBFAFA' }}>
+              EPAM Events
+            </h1>
+            <p className="text-lg font-light" style={{ color: 'rgba(251,250,250,0.55)' }}>
+              Create events, generate QR codes,<br />track attendance instantly.
+            </p>
+          </div>
+
+          {/* Feature row */}
+          <div className="flex items-center justify-center gap-6 flex-wrap">
+            {[
+              { icon: '◈', label: 'QR Check-in' },
+              { icon: '◎', label: 'Live Attendance' },
+              { icon: '⬡', label: 'Excel Export' },
+            ].map(({ icon, label }) => (
+              <div key={label} className="flex items-center gap-2">
+                <span style={{ color: '#00F6FF', fontSize: '0.9rem' }}>{icon}</span>
+                <span className="text-sm font-medium" style={{ color: 'rgba(251,250,250,0.6)' }}>{label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA */}
+          <div className="space-y-3">
+            <Link
+              href="/admin"
+              className="inline-block w-full max-w-xs font-bold text-sm py-3.5 px-8 rounded-sm transition-all"
+              style={{
+                background: '#0047FF',
+                color: '#FBFAFA',
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Open Admin Dashboard
+            </Link>
+            <p className="text-xs" style={{ color: 'rgba(251,250,250,0.35)' }}>
+              Password protected — EPAM team only
+            </p>
+          </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="px-8 py-5 flex items-center justify-between border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        <span className="text-xs" style={{ color: 'rgba(251,250,250,0.25)' }}>
+          © {new Date().getFullYear()} EPAM Systems
+        </span>
+        <span className="text-xs" style={{ color: 'rgba(251,250,250,0.25)' }}>
+          Internal use only
+        </span>
+      </footer>
     </main>
   );
 }

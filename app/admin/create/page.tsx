@@ -3,6 +3,14 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
+
+const S = {
+  bg: '#060606', surface: '#111111', surface2: '#1a1a1a',
+  border: 'rgba(255,255,255,0.08)', sea: '#00F6FF',
+  cobalt: '#0047FF', snow: '#FBFAFA',
+  muted: 'rgba(251,250,250,0.50)', muted2: 'rgba(251,250,250,0.30)',
+};
 
 export default function CreateEventPage() {
   const router = useRouter();
@@ -32,31 +40,37 @@ export default function CreateEventPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f4f6fb]">
-      {/* Top nav */}
-      <header className="bg-white border-b border-slate-100">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center">
-          <Link href="/admin" className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to events
-          </Link>
-        </div>
+    <main className="min-h-screen flex flex-col" style={{ background: S.bg }}>
+      {/* Nav */}
+      <header
+        className="flex items-center justify-between px-6 h-14"
+        style={{ background: S.surface, borderBottom: `1px solid ${S.border}` }}
+      >
+        <Image src="/epam-logo.svg" alt="EPAM" width={80} height={28} priority />
+        <Link
+          href="/admin"
+          className="flex items-center gap-1.5 text-xs transition-colors"
+          style={{ color: S.muted }}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to events
+        </Link>
       </header>
 
-      <div className="max-w-md mx-auto px-4 py-10">
+      <div className="max-w-md mx-auto w-full px-4 py-10">
         <div className="mb-7">
-          <h1 className="text-xl font-bold text-slate-900">Create New Event</h1>
-          <p className="text-slate-500 text-sm mt-1">A QR code will be generated instantly.</p>
+          <h1 className="text-2xl font-black tracking-tight" style={{ color: S.snow }}>Create New Event</h1>
+          <p className="text-sm mt-1" style={{ color: S.muted }}>A QR code will be generated instantly.</p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="h-1 bg-gradient-to-r from-blue-500 to-indigo-500" />
+        <div className="rounded-sm overflow-hidden" style={{ background: S.surface, border: `1px solid ${S.border}` }}>
+          <div className="h-0.5" style={{ background: `linear-gradient(90deg, ${S.sea}, ${S.cobalt})` }} />
           <form onSubmit={handleSubmit} className="p-6 space-y-5">
             {/* Event name */}
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <label className="block text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>
                 Event Name
               </label>
               <input
@@ -65,14 +79,17 @@ export default function CreateEventPage() {
                 onChange={(e) => setName(e.target.value)}
                 required
                 autoFocus
-                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white transition-all"
-                placeholder="e.g. Q3 Team Meeting"
+                placeholder="e.g. Q3 All Hands"
+                className="w-full rounded-sm px-4 py-3 text-sm outline-none transition-all"
+                style={{ background: S.surface2, border: `1px solid ${S.border}`, color: S.snow }}
+                onFocus={(e) => e.currentTarget.style.borderColor = S.sea}
+                onBlur={(e) => e.currentTarget.style.borderColor = S.border}
               />
             </div>
 
             {/* Date */}
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <label className="block text-xs font-semibold uppercase tracking-widest" style={{ color: S.muted }}>
                 Date
               </label>
               <input
@@ -80,37 +97,33 @@ export default function CreateEventPage() {
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 required
-                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white transition-all"
+                className="w-full rounded-sm px-4 py-3 text-sm outline-none transition-all"
+                style={{
+                  background: S.surface2,
+                  border: `1px solid ${S.border}`,
+                  color: S.snow,
+                  colorScheme: 'dark',
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = S.sea}
+                onBlur={(e) => e.currentTarget.style.borderColor = S.border}
               />
             </div>
 
-            {error && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-                <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-                </svg>
-                <p className="text-red-600 text-sm">{error}</p>
-              </div>
-            )}
+            {error && <p className="text-sm" style={{ color: '#FF6B6B' }}>{error}</p>}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors text-sm shadow-sm flex items-center justify-center gap-2"
+              className="w-full font-bold text-sm py-3 rounded-sm uppercase tracking-widest transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ background: S.cobalt, color: S.snow }}
             >
               {loading ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  <div className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid rgba(255,255,255,0.3)', borderTopColor: S.snow }} />
                   Creating...
                 </>
               ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75z" />
-                  </svg>
-                  Create Event & Generate QR Code
-                </>
+                'Create Event & Generate QR'
               )}
             </button>
           </form>
